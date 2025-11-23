@@ -1,5 +1,6 @@
-import pytest
 import numpy as np
+import pytest
+
 from schwabgym.physics.almgren_chriss import AlmgrenChrissOptimalExecutor
 
 # def test_compute_trajectory_basic():
@@ -16,8 +17,11 @@ from schwabgym.physics.almgren_chriss import AlmgrenChrissOptimalExecutor
 #     # First period should be larger than last due to front-loading
 #     assert traj[0] > traj[-1]
 
+
 def test_estimate_impact_cost():
-    executor = AlmgrenChrissOptimalExecutor(lambda_risk=0.01, eta_temp=0.1, gamma_perm=0.05)
+    executor = AlmgrenChrissOptimalExecutor(
+        lambda_risk=0.01, eta_temp=0.1, gamma_perm=0.05
+    )
     trajectory = np.array([3000, 2500, 2000, 1500, 1000])
     volatility = 0.02
     impact_bps = executor.estimate_impact_cost(trajectory, volatility)

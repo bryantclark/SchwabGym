@@ -91,7 +91,7 @@ while client.advance_time():
     # Get quote
     quote = client.quote('AAPL')
     price = quote.json()['AAPL']['quote']['lastPrice']
-    
+
     # Place order
     if some_condition:
         order = eq.equity_buy_market('AAPL', 100)

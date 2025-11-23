@@ -49,7 +49,7 @@ checkpoints/
 *.pth
 *.h5
 
-# Schwab tokens 
+# Schwab tokens
 token.json
 *.token
 credentials/
