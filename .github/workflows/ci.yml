@@ -51,7 +51,4 @@ jobs:
         run: |
           # Convert 3.8 -> py38
           TOX_ENV="py$(echo "${{ matrix.python-version }}" | tr -d .)"
-          # For py311 or other future versions not explicitly in tox envlist, we might want to default or ensure tox knows about it.
-          # Since tox envlist only has py310, running py311 might fail if not configured.
-          # But let's check pyproject.toml again.
           tox -e $TOX_ENV
