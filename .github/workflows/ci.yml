@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.8, 3.9, 3.10]
+        python-version: ["3.10", "3.11"]
 
     steps:
       - name: Checkout
@@ -48,4 +48,7 @@ jobs:
           pip install tox
 
       - name: Run tox
-        run: tox -e py${{ matrix.python-version//./ }}
+        run: |
+          # Convert 3.8 -> py38
+          TOX_ENV="py$(echo "${{ matrix.python-version }}" | tr -d .)"
+          tox -e $TOX_ENV

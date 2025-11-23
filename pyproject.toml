@@ -1,6 +1,6 @@
 [tool.black]
 line-length = 88
-target-version = ["py38"]
+target-version = ["py310"]
 include = '\.pyi?$'
 exclude = '''
 /(\
@@ -22,7 +22,7 @@ max-line-length = 88
 extend-ignore = ["E203", "W503"]
 
 [tool.tox]
-env_list = ["py38", "py39", "py310"]
+env_list = ["py310", "py311"]
 
 [tool.tox.testenv]
 description = "Run linters, pre-commit checks, and tests"
