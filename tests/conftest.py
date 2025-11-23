@@ -47,7 +47,7 @@ def client(sample_data):
 @pytest.fixture
 def account_hash(client):
     """Get account hash from client."""
-    return client.account_linked().json()["hashValue"]
+    return client.get_account_numbers().json()["hashValue"]
 
 
 @pytest.fixture

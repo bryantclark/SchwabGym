@@ -9,6 +9,7 @@ Author: Bryant Clark
 
 import numpy as np
 import pytest
+from unittest.mock import patch
 
 from schwabgym import SchwabTradingEnv, load_and_clean_data
 from schwabgym.environment import ZScoreNormalizer
@@ -146,10 +147,36 @@ class TestSchwabTradingEnv:
         assert reward == -10.0
 
     def test_render_chart(self, env):
-        """Test render chart (smoke test)."""
-        env.reset()
-        env.step(np.array([1.0, 0.1]))
-        env.step(np.array([-1.0, 0.1]))
+        """Test chart rendering."""
+        obs, _ = env.reset()
+        
+        # Step a few times to generate history
+        for _ in range(5):
+            action = env.action_space.sample()
+            env.step(action)
+            
+        # Test render 'chart' mode
+        # We mock plt.show to avoid opening a window during tests
+        with patch('matplotlib.pyplot.show'):
+            env.render_mode = 'chart'
+            env.render()
+            
+        # Test render 'human' mode
+    def test_rsi_flat_prices(self, env):
+        """Test RSI calculation with flat prices (no gains/losses)."""
+        prices = np.array([100.0] * 20)
+        rsi = env._calc_rsi(prices)
+        assert rsi == 50.0
 
-        # uncomment to actually test. I just dont like the popups
-        # env.render_chart()
+    def test_rsi_only_gains(self, env):
+        """Test RSI with only gains."""
+        prices = np.array([100.0 + i for i in range(20)])
+        rsi = env._calc_rsi(prices)
+        assert rsi == 100.0
+
+    def test_rsi_only_losses(self, env):
+        """Test RSI with only losses."""
+        prices = np.array([100.0 - i for i in range(20)])
+        rsi = env._calc_rsi(prices)
+        # Should be close to 0
+        assert rsi < 10.0

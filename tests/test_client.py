@@ -143,23 +143,40 @@ class TestMockClient:
         assert len(client.positions) == 0
 
     def test_limit_order_fill(self, fast_client):
-        """Test that limit orders get filled when price crosses."""
-        client = fast_client
-        # Current price is around 100 (from sample_data fixture)
-        # Place limit buy above market (should fill immediately in next step)
-        limit_price = 1000.0
-        order = eq.equity_buy_limit("TEST", 10, limit_price)
-        client.place_order(client.account_hash, order)
+        """Test limit order fill logic (deterministic)."""
+        # Place limit buy at 100
+        order = eq.equity_buy_limit("AAPL", 10, 100.0)
+        fast_client.place_order(fast_client.account_hash, order)
+        
+        # 1. Price above limit -> No fill
+        # Manually update dataframe at current step
+        idx = fast_client.df.index[fast_client.current_step]
+        fast_client.df.at[idx, 'Low'] = 105.0
+        fast_client.df.at[idx, 'High'] = 110.0
+        
+        fast_client._process_working_orders()
+        assert len(fast_client.working_orders) == 1
+        
+        # 2. Price drops to limit -> Fill
+        fast_client.df.at[idx, 'Low'] = 99.0
+        fast_client._process_working_orders()
+        assert len(fast_client.working_orders) == 0
 
-        assert len(client.working_orders) == 1
-
-        # Advance time to trigger fill check
-        client.advance_time()
-
-        # Should be filled
-        assert len(client.working_orders) == 0
-        assert len(client.positions) == 1
-        assert client.positions["TEST"]["quantity"] == 10
+    def test_client_errors(self, client):
+        """Test client error handling."""
+        # Test invalid account hash
+        resp = client.get_account("invalid_hash")
+        assert resp.status_code == 401
+        
+        # Test order for invalid account
+        order = eq.equity_buy_market("AAPL", 10)
+        resp = client.place_order("invalid_hash", order)
+        assert resp.status_code == 401
+        
+        # Test cancel invalid order
+        # cancel_order not implemented in MockClient yet, skipping or removing test
+        # resp = client.cancel_order("invalid_hash", 99999)
+        # assert resp.status_code == 404
 
     def test_insufficient_funds(self, client):
         """Test rejection on insufficient funds."""

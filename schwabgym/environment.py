@@ -273,6 +273,8 @@ class SchwabTradingEnv(gym.Env):
         losses = -delta[delta < 0].sum() / period
 
         if losses == 0:
+            if gains == 0:
+                return 50.0
             return 100.0
 
         rs = gains / losses
