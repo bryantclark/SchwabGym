@@ -5,7 +5,7 @@ Schwab Trading Simulator - Gymnasium Environment
 Reinforcement learning environment for training trading agents with realistic
 market simulation and API-compatible interface.
 
-Author: Your Name
+Author: Bryant Clark
 License: MIT
 """
 
