@@ -2,7 +2,7 @@
 SchwabGym Fast Execution Engine
 ================================
 
-Simplified physics for rapid prototyping and CPU debugging.
+Simplified physics for rapid prototyping.
 
 Author: Bryant Clark
 Repository: https://github.com/bryantclark/SchwabGym
@@ -24,17 +24,10 @@ class FastExecutionEngine(ExecutionEngine):
     - Binary limit order fills
     - Minimal computational overhead
     
-    Speed: ~10,000-20,000 steps/second
-    
     Use when:
     - Debugging strategy logic on CPU
     - Quick prototypes
     - Testing basic functionality
-    
-    Example:
-        >>> from schwabgym.physics import FastExecutionEngine
-        >>> engine = FastExecutionEngine(base_slippage=0.02)
-        >>> client = MockClient(df, execution_engine=engine)
     """
     
     def __init__(self, base_slippage: float = 0.01):

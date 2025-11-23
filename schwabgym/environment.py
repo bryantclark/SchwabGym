@@ -2,8 +2,7 @@
 Schwab Trading Simulator - Gymnasium Environment
 ================================================
 
-Reinforcement learning environment for training trading agents with realistic
-market simulation and API-compatible interface.
+Reinforcement learning environment for training trading agents.
 
 Author: Bryant Clark
 License: MIT
@@ -38,10 +37,6 @@ class ZScoreNormalizer:
         var (np.ndarray): Running variance
         count (float): Number of observations seen
         clip (float): Maximum absolute z-score value
-        
-    Example:
-        >>> normalizer = ZScoreNormalizer(shape=(8,))
-        >>> norm_obs = normalizer.normalize(raw_obs)
     """
     
     def __init__(self, shape: Tuple[int, ...], clip_range: float = 10.0):
@@ -124,15 +119,6 @@ class SchwabTradingEnv(gym.Env):
         client (MockClient): Simulator instance
         history_log (List): Episode history for visualization
         trades_log (List): Trade execution log
-        
-    Example:
-        >>> from trading_env import SchwabTradingEnv
-        >>> from stable_baselines3 import PPO
-        >>> 
-        >>> env = SchwabTradingEnv(df, ticker='AAPL')
-        >>> model = PPO('MlpPolicy', env, verbose=1)
-        >>> model.learn(total_timesteps=10000)
-        >>> env.render_chart()
     """
     
     metadata = {'render_modes': ['human', 'chart']}
@@ -196,7 +182,7 @@ class SchwabTradingEnv(gym.Env):
         Returns:
             tuple: (normalized_obs, nav, current_price, position_shares)
         """
-        # === CRITICAL: Parse JSON responses like real API ===
+        # === Parse JSON responses like real API ===
         
         # Get historical data for indicators
         hist_resp = self.client.get_price_history(self.ticker)

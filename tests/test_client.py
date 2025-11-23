@@ -27,7 +27,7 @@ class TestMockClient:
 
     def test_account_linked(self, client):
         """Test account linking."""
-        resp = client.account_linked()
+        resp = client.get_account_numbers()
         assert resp.status_code == 200
         data = resp.json()
         assert 'accountNumber' in data
@@ -36,7 +36,7 @@ class TestMockClient:
 
     def test_account_details(self, client):
         """Test account details retrieval."""
-        resp = client.account_details(client.account_hash)
+        resp = client.get_account(client.account_hash)
         assert resp.status_code == 200
         data = resp.json()
         
@@ -49,7 +49,7 @@ class TestMockClient:
     def test_quote(self, client):
         """Test quote retrieval."""
         # Single symbol
-        resp = client.quote('TEST')
+        resp = client.get_quotes('TEST')
         assert resp.status_code == 200
         data = resp.json()
         assert 'TEST' in data
@@ -57,14 +57,14 @@ class TestMockClient:
         assert data['TEST']['quote']['lastPrice'] > 0
 
         # Multiple symbols
-        resp = client.quote(['TEST', 'OTHER'])
+        resp = client.get_quotes(['TEST', 'OTHER'])
         data = resp.json()
         assert 'TEST' in data
         assert 'OTHER' in data
 
     def test_price_history(self, client):
         """Test price history retrieval."""
-        resp = client.price_history('TEST')
+        resp = client.get_price_history('TEST')
         assert resp.status_code == 200
         data = resp.json()
         assert 'candles' in data
@@ -74,7 +74,7 @@ class TestMockClient:
     def test_market_buy_order(self, client):
         """Test placing a market buy order."""
         # Get initial price
-        quote = client.quote('TEST').json()['TEST']['quote']['lastPrice']
+        quote = client.get_quotes('TEST').json()['TEST']['quote']['lastPrice']
         qty = 10
         
         # Place order
@@ -84,7 +84,7 @@ class TestMockClient:
         assert resp.status_code == 201
         
         # Verify position
-        acct = client.account_details(client.account_hash).json()['securitiesAccount']
+        acct = client.get_account(client.account_hash).json()['securitiesAccount']
         positions = acct['positions']
         assert len(positions) == 1
         assert positions[0]['instrument']['symbol'] == 'TEST'
@@ -106,7 +106,7 @@ class TestMockClient:
         assert resp.status_code == 201
         
         # Verify position reduced
-        acct = client.account_details(client.account_hash).json()['securitiesAccount']
+        acct = client.get_account(client.account_hash).json()['securitiesAccount']
         pos = acct['positions'][0]
         assert pos['longQuantity'] == 10
 
@@ -119,7 +119,7 @@ class TestMockClient:
         assert resp.status_code == 201
         
         # Verify short position
-        acct = client.account_details(client.account_hash).json()['securitiesAccount']
+        acct = client.get_account(client.account_hash).json()['securitiesAccount']
         pos = acct['positions'][0]
         assert pos['shortQuantity'] == 10
         assert pos['longQuantity'] == 0
@@ -127,7 +127,7 @@ class TestMockClient:
     def test_limit_order_queuing(self, client):
         """Test that limit orders are queued."""
         # Place limit buy well below market
-        current_price = client.quote('TEST').json()['TEST']['quote']['lastPrice']
+        current_price = client.get_quotes('TEST').json()['TEST']['quote']['lastPrice']
         limit_price = current_price * 0.5
         
         order = eq.equity_buy_limit('TEST', 10, limit_price)
@@ -188,7 +188,7 @@ class TestMockClient:
 
     def test_unauthorized_access(self, client):
         """Test unauthorized access."""
-        resp = client.account_details("WRONG_HASH")
+        resp = client.get_account("WRONG_HASH")
         assert resp.status_code == 401
         
         resp = client.place_order("WRONG_HASH", {})
