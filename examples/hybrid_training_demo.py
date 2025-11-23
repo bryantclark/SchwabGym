@@ -58,13 +58,13 @@ def compare_execution_modes(df, ticker='AAPL'):
         
         # Create client with specific engine
         client = MockClient(df, initial_cash=100000, execution_engine=engine)
-        account_hash = client.account_linked().json()['hashValue']
+        account_hash = client.get_account_numbers().json()['hashValue']
         
         # Execute buy
         buy_order = eq.equity_buy_market(ticker, test_quantity)
         client.place_order(account_hash, buy_order)
         
-        acct = client.account_details(account_hash).json()['securitiesAccount']
+        acct = client.get_account(account_hash).json()['securitiesAccount']
         positions = acct.get('positions', [])
         if not positions:
             logger.warning("No position opened!")
@@ -81,7 +81,7 @@ def compare_execution_modes(df, ticker='AAPL'):
         client.place_order(account_hash, sell_order)
         
         # Calculate P&L
-        final_acct = client.account_details(account_hash).json()['securitiesAccount']
+        final_acct = client.get_account(account_hash).json()['securitiesAccount']
         final_cash = final_acct['currentBalances']['cashBalance']
         pnl = final_cash - 100000
         
@@ -174,7 +174,7 @@ def train_with_domain_randomization(df, ticker='AAPL'):
     )
     
     client = MockClient(df, initial_cash=50000, execution_engine=hybrid_engine)
-    account_hash = client.account_linked().json()['hashValue']
+    account_hash = client.get_account_numbers().json()['hashValue']
     
     # Simulate 20 episodes
     n_episodes = 20
@@ -206,7 +206,7 @@ def train_with_domain_randomization(df, ticker='AAPL'):
         client.place_order(account_hash, sell_order)
         
         # Record result
-        final_acct = client.account_details(account_hash).json()['securitiesAccount']
+        final_acct = client.get_account(account_hash).json()['securitiesAccount']
         pnl = final_acct['currentBalances']['liquidationValue'] - 50000
         
         episode_results.append({

@@ -3,7 +3,7 @@ SchwabGym Order Builders
 ========================
 
 Compatible order construction matching schwab.orders.equities and
-schwab.orders.options for seamless transition to live trading.
+schwab.orders.options.
 
 Author: Bryant Clark
 Repository: https://github.com/bryantclark/SchwabGym
@@ -17,9 +17,9 @@ class MockResponse:
     """
     Mock HTTP response object matching httpx/requests interface.
     
-    Schwab-py returns httpx.Response objects. This class replicates
-    the interface so bot code can call .json() and .status_code
-    identically in simulation and production.
+    This class replicates the `httpx.Response` interface returned by `schwab-py`.
+    It allows bot code to call `.json()` and check `.status_code` identically
+    in both simulation and production environments.
     """
     
     def __init__(self, json_data: Dict, status_code: int = 200, headers: Optional[Dict] = None):
@@ -49,13 +49,10 @@ class MockEquities:
     """
     Order builders for equity securities.
     
-    These methods construct order JSON payloads that match the exact
-    structure expected by schwab.client.Client.place_order().
+    These methods construct order JSON payloads that match the structure
+    expected by `schwab.client.Client.place_order()`.
     
-    When you switch to live trading, simply replace this with:
-        from schwab.orders import equities as eq
-    
-    All your order construction code remains identical.
+    This class mimics `schwab.orders.equities`.
     """
     
     @staticmethod
@@ -115,11 +112,6 @@ class MockEquities:
             
         Returns:
             dict: Order specification
-            
-        Example:
-            >>> from schwabgym.orders import MockEquities as eq
-            >>> order = eq.equity_buy_market('AAPL', 100)
-            >>> client.place_order(account_hash, order)
         """
         return MockEquities._base_order(symbol, quantity, "BUY", "MARKET")
     
@@ -230,8 +222,8 @@ class MockOptions:
     """
     Order builders for option contracts.
     
-    Note: Option support is currently limited in the simulator.
-    These builders are provided for API compatibility.
+    Provided for API compatibility with `schwab.orders.options`.
+    Note: Option support in the simulator is currently limited.
     """
     
     @staticmethod

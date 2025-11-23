@@ -2,10 +2,9 @@
 Schwab Trading Simulator - Gymnasium Environment
 ================================================
 
-Reinforcement learning environment for training trading agents with realistic
-market simulation and API-compatible interface.
+Reinforcement learning environment for training trading agents.
 
-Author: Your Name
+Author: Bryant Clark
 License: MIT
 """
 
@@ -38,10 +37,6 @@ class ZScoreNormalizer:
         var (np.ndarray): Running variance
         count (float): Number of observations seen
         clip (float): Maximum absolute z-score value
-        
-    Example:
-        >>> normalizer = ZScoreNormalizer(shape=(8,))
-        >>> norm_obs = normalizer.normalize(raw_obs)
     """
     
     def __init__(self, shape: Tuple[int, ...], clip_range: float = 10.0):
@@ -124,15 +119,6 @@ class SchwabTradingEnv(gym.Env):
         client (MockClient): Simulator instance
         history_log (List): Episode history for visualization
         trades_log (List): Trade execution log
-        
-    Example:
-        >>> from trading_env import SchwabTradingEnv
-        >>> from stable_baselines3 import PPO
-        >>> 
-        >>> env = SchwabTradingEnv(df, ticker='AAPL')
-        >>> model = PPO('MlpPolicy', env, verbose=1)
-        >>> model.learn(total_timesteps=10000)
-        >>> env.render_chart()
     """
     
     metadata = {'render_modes': ['human', 'chart']}
@@ -162,7 +148,7 @@ class SchwabTradingEnv(gym.Env):
         
         # Initialize simulator
         self.client = MockClient(self.df, initial_cash=initial_cash)
-        self.account_hash = self.client.account_linked().json()['hashValue']
+        self.account_hash = self.client.get_account_numbers().json()['hashValue']
         
         # Action space: [signal (-1 to 1), size (0 to 1)]
         self.action_space = spaces.Box(
@@ -196,19 +182,19 @@ class SchwabTradingEnv(gym.Env):
         Returns:
             tuple: (normalized_obs, nav, current_price, position_shares)
         """
-        # === CRITICAL: Parse JSON responses like real API ===
+        # === Parse JSON responses like real API ===
         
         # Get historical data for indicators
-        hist_resp = self.client.price_history(self.ticker)
+        hist_resp = self.client.get_price_history(self.ticker)
         candles = hist_resp.json()['candles']
         hist_prices = np.array([c['close'] for c in candles], dtype=np.float32)
         
         # Get current quote (raw price for PnL)
-        quote_resp = self.client.quote(self.ticker)
+        quote_resp = self.client.get_quotes([self.ticker])
         raw_price = float(quote_resp.json()[self.ticker]['quote']['lastPrice'])
         
         # Get account state
-        acct_resp = self.client.account_details(self.account_hash)
+        acct_resp = self.client.get_account(self.account_hash)
         acct = acct_resp.json()['securitiesAccount']
         nav = float(acct['currentBalances']['liquidationValue'])
         
@@ -308,7 +294,7 @@ class SchwabTradingEnv(gym.Env):
         
         # Reset simulator
         self.client = MockClient(self.df, initial_cash=self.initial_cash)
-        self.account_hash = self.client.account_linked().json()['hashValue']
+        self.account_hash = self.client.get_account_numbers().json()['hashValue']
         
         # Clear logs
         self.history_log = []
@@ -354,7 +340,7 @@ class SchwabTradingEnv(gym.Env):
                         executed_type = "COVER"
             else:
                 # Increase long position
-                acct = self.client.account_details(self.account_hash).json()['securitiesAccount']
+                acct = self.client.get_account(self.account_hash).json()['securitiesAccount']
                 bp = acct['currentBalances']['buyingPower']
                 raw_price = self.client._get_current_raw_price(self.ticker)
                 qty = int((bp * size_pct) // raw_price)
@@ -376,7 +362,7 @@ class SchwabTradingEnv(gym.Env):
                         executed_type = "SELL"
             else:
                 # Increase short position
-                acct = self.client.account_details(self.account_hash).json()['securitiesAccount']
+                acct = self.client.get_account(self.account_hash).json()['securitiesAccount']
                 bp = acct['currentBalances']['buyingPower']
                 raw_price = self.client._get_current_raw_price(self.ticker)
                 qty = int((bp * size_pct) // raw_price)

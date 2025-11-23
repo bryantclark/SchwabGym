@@ -2,7 +2,7 @@
 SchwabGym Hybrid Execution Engine
 ==================================
 
-Domain randomization for robust Sim-to-Real transfer.
+Domain randomization wrapper for execution engines.
 
 Author: Bryant Clark
 Repository: https://github.com/bryantclark/SchwabGym
@@ -24,31 +24,12 @@ class HybridExecutionEngine(ExecutionEngine):
     Domain Randomization Engine.
     
     Randomly switches between Fast and Realistic modes to create
-    a robust training environment. This prevents overfitting to
-    idealized execution conditions.
-    
-    **Optional but recommended for maximum robustness.**
+    a robust training environment.
     
     Usage in RL:
         The agent never knows which physics engine is active.
         This forces it to learn strategies that work under both
         perfect (fast) and imperfect (realistic) execution.
-        
-    Speed: ~7,000 steps/second average (70% fast, 30% realistic)
-    
-    Use when:
-    - Maximum robustness desired
-    - Training with domain randomization
-    - Preparing for highly variable live conditions
-    
-    Example:
-        >>> from schwabgym.physics import HybridExecutionEngine
-        >>> 
-        >>> # 30% realistic, 70% fast
-        >>> engine = HybridExecutionEngine(realistic_probability=0.3)
-        >>> client = MockClient(df, execution_engine=engine)
-        >>> 
-        >>> # Agent randomly experiences both physics!
     """
     
     def __init__(
@@ -64,7 +45,7 @@ class HybridExecutionEngine(ExecutionEngine):
         Args:
             realistic_probability (float): Probability of using realistic physics
                 - 0.0 = always fast
-                - 0.3 = 30% realistic, 70% fast (RECOMMENDED)
+                - 0.3 = 30% realistic, 70% fast (recommended)
                 - 1.0 = always realistic
             fast_engine (FastExecutionEngine, optional): Custom fast engine
             realistic_engine (RealisticExecutionEngine, optional): Custom realistic engine
@@ -121,7 +102,7 @@ class HybridExecutionEngine(ExecutionEngine):
     
     def get_statistics(self) -> Dict:
         """
-        Return usage statistics (useful for monitoring training).
+        Return usage statistics.
         
         Returns:
             dict: Current mode and configuration
