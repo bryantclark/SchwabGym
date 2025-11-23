@@ -2,8 +2,7 @@
 SchwabGym Core Client
 =====================
 
-Production-grade simulator that replicates the Charles Schwab Trader API
-with perfect fidelity for training reinforcement learning agents.
+Simulator that replicates the Charles Schwab Trader API for training reinforcement learning agents.
 
 Author: Bryant Clark
 Repository: https://github.com/bryantclark/SchwabGym
@@ -25,21 +24,10 @@ logger = logging.getLogger(__name__)
 
 class MockClient:
     """
-    High-fidelity simulator of schwab.client.Client.
+    Simulator of schwab.client.Client.
     
-    This class provides perfect API parity with schwab-py, enabling agents
-    to be trained in simulation and deployed to live trading with zero
-    code changes. The simulator enforces all real-world constraints including:
-    
-    - Pattern Day Trading (PDT) rules
-    - Margin requirements (Regulation T)
-    - Regulatory fees (SEC Section 31, FINRA TAF)
-    - Market impact (Square Root Law)
-    - Volume-constrained fills
-    
-    The dual-price system maintains both raw execution prices (Close) and
-    adjusted analytical prices (AdjClose) to prevent look-ahead bias while
-    enabling accurate backtesting.
+    This class provides API compatibility with schwab-py, enabling agents
+    to be trained in simulation and deployed to live trading.
     
     Attributes:
         df (pd.DataFrame): Historical OHLCV data with dual-price columns
@@ -49,28 +37,6 @@ class MockClient:
         positions (Dict): Open positions {symbol: {quantity, avgPrice, assetType}}
         execution_engine (ExecutionEngine): Physics model for order fills
         fee_calculator (FeeCalculator): Regulatory fee computation
-        
-    Example:
-        >>> from schwabgym import MockClient, load_and_clean_data
-        >>> from schwabgym.orders import MockEquities as eq
-        >>> 
-        >>> df = load_and_clean_data('AAPL_5min.csv')
-        >>> client = MockClient(df, initial_cash=25000)
-        >>> 
-        >>> # Use exactly like schwab-py
-        >>> account_hash = client.account_linked().json()['hashValue']
-        >>> quote = client.quote('AAPL')
-        >>> order = eq.equity_buy_market('AAPL', 100)
-        >>> response = client.place_order(account_hash, order)
-        >>> 
-        >>> # Advance simulation time
-        >>> client.advance_time()
-        
-    Notes:
-        - All method signatures match schwab.client.Client exactly
-        - All JSON responses match production API structure
-        - Designed for GPU-accelerated RL training (minimal overhead)
-        - Thread-safe for vectorized environments
     """
     
     # ==================== REGULATORY CONSTANTS ====================
@@ -101,20 +67,6 @@ class MockClient:
                 - Volatility: (optional) calculated if missing
             initial_cash (float): Starting cash balance
             execution_engine (ExecutionEngine, optional): Physics model.
-                Defaults to RealisticExecutionEngine for production training.
-                Use FastExecutionEngine for quick prototypes.
-                
-        Raises:
-            ValueError: If required columns missing from dataframe
-            
-        Example:
-            >>> # Default (realistic physics for production)
-            >>> client = MockClient(df)
-            >>> 
-            >>> # Custom physics
-            >>> from schwabgym.physics import FastExecutionEngine
-            >>> engine = FastExecutionEngine()
-            >>> client = MockClient(df, execution_engine=engine)
         """
         # Validate required columns
         required_cols = {'Open', 'High', 'Low', 'Close', 'Volume'}
@@ -146,7 +98,7 @@ class MockClient:
         # Physics engine (defaults to realistic for production)
         if execution_engine is None:
             self.execution_engine = RealisticExecutionEngine()
-            logger.info("Using RealisticExecutionEngine (default for GPU training)")
+            logger.info("Using RealisticExecutionEngine")
         else:
             self.execution_engine = execution_engine
             logger.info(f"Using {type(execution_engine).__name__}")
@@ -155,8 +107,6 @@ class MockClient:
         self.fee_calculator = FeeCalculator()
         
         logger.info(f"MockClient initialized: ${initial_cash:,.2f} starting capital")
-        logger.info(f"Data range: {self.df.index[0]} to {self.df.index[-1]}")
-        logger.info(f"Total steps: {self.max_steps + 1}")
 
     # ==================== SIMULATION CONTROL ====================
     
@@ -164,18 +114,8 @@ class MockClient:
         """
         Advance simulator by one time step.
         
-        Moves the internal clock forward one bar and handles day transitions
-        by clearing overnight position tracking for PDT enforcement.
-        Also checks and fills working orders.
-        
         Returns:
             bool: True if successfully advanced, False if at end of data
-            
-        Example:
-            >>> while client.advance_time():
-            ...     # Trading logic
-            ...     quote = client.quote('AAPL')
-            ...     # ... make decisions ...
         """
         if self.current_step >= self.max_steps:
             logger.warning("Reached end of market data")
@@ -200,20 +140,9 @@ class MockClient:
         """
         Reset simulator to initial state.
         
-        Useful for episodic RL training where you want to restart from
-        the beginning of the data with fresh capital.
-        
         Args:
             initial_cash (float, optional): New starting cash.
                 Uses original value if None.
-                
-        Example:
-            >>> # Run one episode
-            >>> while client.advance_time():
-            ...     # ... trading ...
-            >>> 
-            >>> # Reset for next episode
-            >>> client.reset()
         """
         self.current_step = 0
         if initial_cash is not None:
@@ -282,10 +211,6 @@ class MockClient:
     def _check_pdt_rule(self, symbol: str, instruction: str, curr_qty: int) -> None:
         """
         Enforce Pattern Day Trading rules.
-        
-        A day trade occurs when you open and close a position on the same day.
-        If account equity < $25k and you make 4+ day trades in 5 days, the
-        account gets flagged and new orders are rejected.
         
         Args:
             symbol (str): Ticker symbol
@@ -404,7 +329,7 @@ class MockClient:
         # Execute based on instruction
         if instruction in ['BUY', 'BUY_TO_COVER', 'BUY_TO_OPEN']:
             # Check buying power
-            acct = self.account_details(self.account_hash).json()['securitiesAccount']
+            acct = self.get_account(self.account_hash).json()['securitiesAccount']
             bp = acct['currentBalances']['buyingPower']
             
             if total_cost > bp:
@@ -455,27 +380,19 @@ class MockClient:
     # ==================== SCHWAB API INTERFACE ====================
     # These methods provide exact parity with schwab.client.Client
     
-    def account_linked(self) -> MockResponse:
+    def get_account_numbers(self) -> MockResponse:
         """
         Get linked account information (schwab.client.Client.get_account_numbers).
         
-        Returns the account number and encrypted hash value required for
-        all subsequent account-specific API calls.
-        
         Returns:
             MockResponse: JSON with accountNumber and hashValue
-            
-        Example:
-            >>> resp = client.account_linked()
-            >>> accounts = resp.json()
-            >>> # [{'accountNumber': '12345678', 'hashValue': 'HASH_1234'}]
         """
         return MockResponse({
             'accountNumber': self.account_number,
             'hashValue': self.account_hash
         })
 
-    def account_details(
+    def get_account(
         self,
         account_hash: str,
         fields: Optional[str] = None
@@ -483,31 +400,12 @@ class MockClient:
         """
         Get detailed account information (schwab.client.Client.get_account).
         
-        Returns complete account state including positions, balances, buying
-        power, and PDT status. This is the primary "observation" for RL agents.
-        
         Args:
-            account_hash (str): Encrypted account hash from account_linked()
+            account_hash (str): Encrypted account hash from get_account_numbers()
             fields (str, optional): Fields to include (not used in simulator)
             
         Returns:
             MockResponse: JSON with securitiesAccount object
-            
-        Example:
-            >>> acct_hash = client.account_linked().json()['hashValue']
-            >>> resp = client.account_details(acct_hash)
-            >>> acct = resp.json()['securitiesAccount']
-            >>> 
-            >>> # Access balances
-            >>> equity = acct['currentBalances']['liquidationValue']
-            >>> cash = acct['currentBalances']['cashBalance']
-            >>> bp = acct['currentBalances']['buyingPower']
-            >>> 
-            >>> # Access positions
-            >>> for pos in acct['positions']:
-            ...     symbol = pos['instrument']['symbol']
-            ...     qty = pos['longQuantity']
-            ...     price = pos['averagePrice']
         """
         if account_hash != self.account_hash:
             return MockResponse({"error": "Unauthorized"}, 401)
@@ -553,28 +451,16 @@ class MockClient:
             }
         })
 
-    def quote(self, symbols: Union[str, List[str]]) -> MockResponse:
+    def get_quotes(self, symbols: Union[str, List[str]], fields: Optional[str] = None) -> MockResponse:
         """
         Get current quote(s) (schwab.client.Client.get_quotes).
         
-        Returns raw execution prices (Close column) representing current
-        market state. This is what you'd see in real-time quotes.
-        
         Args:
             symbols (str or List[str]): Single symbol or list of symbols
+            fields (str, optional): Fields to include
             
         Returns:
             MockResponse: JSON with quote data for each symbol
-            
-        Example:
-            >>> # Single quote
-            >>> resp = client.quote('AAPL')
-            >>> price = resp.json()['AAPL']['quote']['lastPrice']
-            >>> 
-            >>> # Multiple quotes
-            >>> resp = client.quote(['AAPL', 'MSFT', 'GOOGL'])
-            >>> for symbol, data in resp.json().items():
-            ...     print(f"{symbol}: ${data['quote']['lastPrice']}")
         """
         if isinstance(symbols, str):
             symbols = [symbols]
@@ -600,45 +486,25 @@ class MockClient:
         
         return MockResponse(response_body)
 
-    def price_history(
+    def get_price_history(
         self,
         symbol: str,
-        periodType: Optional[str] = None,
+        period_type: Optional[str] = None,
         period: Optional[int] = None,
-        frequencyType: Optional[str] = None,
-        frequency: Optional[int] = None
+        frequency_type: Optional[str] = None,
+        frequency: Optional[int] = None,
+        start_date: Optional[datetime.datetime] = None,
+        end_date: Optional[datetime.datetime] = None,
+        need_extended_hours_data: Optional[bool] = None,
     ) -> MockResponse:
         """
         Get historical OHLCV data (schwab.client.Client.get_price_history).
         
-        Returns adjusted close prices for technical analysis, matching the
-        behavior of real data providers. This prevents look-ahead bias while
-        enabling accurate indicator calculations.
-        
-        CRITICAL: The agent must parse the 'candles' list exactly like it would
-        with the real API. No helper methods - this forces realistic data handling.
-        
         Args:
             symbol (str): Ticker symbol
-            periodType (str, optional): Not used in simulator
-            period (int, optional): Not used in simulator
-            frequencyType (str, optional): Not used in simulator
-            frequency (int, optional): Not used in simulator
             
         Returns:
             MockResponse: JSON with 'candles' list
-            
-        Example:
-            >>> # Get history
-            >>> resp = client.price_history('AAPL')
-            >>> candles = resp.json()['candles']
-            >>> 
-            >>> # Parse just like production code
-            >>> closes = [c['close'] for c in candles]
-            >>> volumes = [c['volume'] for c in candles]
-            >>> 
-            >>> # Calculate indicator
-            >>> sma_20 = sum(closes[-20:]) / 20
         """
         LOOKBACK = 50  # Return last 50 bars
         start_idx = max(0, self.current_step - LOOKBACK + 1)
@@ -670,37 +536,12 @@ class MockClient:
         """
         Place an order (schwab.client.Client.place_order).
         
-        Executes order with realistic market impact, fees, and regulatory
-        checks. Enforces PDT rules, buying power constraints, and position
-        limits.
-        
-        CRITICAL: This method expects the exact JSON schema from schwab-py's
-        order builders (equity_buy_market, equity_sell_market, etc.). This
-        ensures your bot's order construction code is production-ready.
-        
         Args:
             account_hash (str): Encrypted account hash
             order (Dict): Order specification from schwab.orders.equities
             
         Returns:
             MockResponse: Empty dict on success (201), error dict on failure
-            
-        Raises:
-            403: If PDT restricted
-            400: If insufficient funds or invalid order
-            
-        Example:
-            >>> from schwabgym.orders import MockEquities as eq
-            >>> 
-            >>> # Market order (exactly like production)
-            >>> order = eq.equity_buy_market('AAPL', 100)
-            >>> resp = client.place_order(account_hash, order)
-            >>> 
-            >>> # Check response
-            >>> if resp.status_code == 201:
-            ...     print("Order filled")
-            >>> else:
-            ...     print(f"Error: {resp.json()}")
         """
         if account_hash != self.account_hash:
             return MockResponse({"error": "Unauthorized"}, 401)

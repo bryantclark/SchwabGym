@@ -46,7 +46,7 @@ def simple_mean_reversion_strategy():
     
     # Initialize simulator with $100k starting capital
     client = MockClient(df, initial_cash=100000.0)
-    account_hash = client.account_linked().json()['hashValue']
+    account_hash = client.get_account_numbers().json()['hashValue']
     
     logger.info("=" * 60)
     logger.info("MEAN REVERSION STRATEGY BACKTEST")
@@ -63,7 +63,7 @@ def simple_mean_reversion_strategy():
         current_step = client.current_step
         
         # Get recent price history for indicator calculation
-        hist_resp = client.price_history(ticker)
+        hist_resp = client.get_price_history(ticker)
         candles = hist_resp.json()['candles']
         
         if len(candles) < 20:
@@ -77,7 +77,7 @@ def simple_mean_reversion_strategy():
         sma_20 = sum(prices[-20:]) / 20
         
         # Get account state
-        acct_resp = client.account_details(account_hash)
+        acct_resp = client.get_account(account_hash)
         acct = acct_resp.json()['securitiesAccount']
         cash = acct['currentBalances']['cashBalance']
         
@@ -118,7 +118,7 @@ def simple_mean_reversion_strategy():
     
     # === FINAL RESULTS ===
     
-    final_acct = client.account_details(account_hash).json()['securitiesAccount']
+    final_acct = client.get_account(account_hash).json()['securitiesAccount']
     final_nav = final_acct['currentBalances']['liquidationValue']
     
     initial_capital = 100000.0
