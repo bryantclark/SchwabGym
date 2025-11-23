@@ -4,7 +4,6 @@
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![GPU Optimized](https://img.shields.io/badge/GPU-Optimized-green.svg)](https://colab.research.google.com/)
 
 Developed by [Bryant Clark](https://github.com/bryantclark)
 
@@ -12,47 +11,92 @@ Developed by [Bryant Clark](https://github.com/bryantclark)
 
 ## Overview
 
-SchwabGym is a production-grade trading simulator designed for training deep reinforcement learning agents that deploy to live markets via the Charles Schwab API. Unlike toy environments, SchwabGym provides **perfect API parity** with `schwab-py`, ensuring that your trained agents require **zero code changes** when transitioning from simulation to live trading.
+SchwabGym is a trading simulator designed for training deep reinforcement learning agents that deploy to live markets via the Charles Schwab API. SchwabGym provides **high API fidelity** with `schwab-py`, ensuring that your trained agents require **minimal code changes** when transitioning from simulation to live trading.
+
+## Project Structure
+
+The repository layout (top-level) is shown below. This representation is intended to help contributors quickly find modules, tests, and examples. Some subfolders contain additional files (e.g. `tensorboard` event logs, cached data) and are elided for brevity.
+
+```
+examples/
+    basic_trading.py
+    hybrid_training_demo.py
+    rl_trading.py
+schwabgym/
+    __init__.py
+    client.py
+    data.py
+    environment.py
+    fees.py
+    orders.py
+    physics/
+        __init__.py
+        almgren_chriss.py
+        base.py
+        fast.py
+        hybrid.py
+        PHYSICS_ENGINE.md
+        realistic.py
+tests/
+    conftest.py
+    test_client.py
+    test_data.py
+    test_environment.py
+    test_fees.py
+    test_orders.py
+    test_physics_almgren_chriss.py
+    test_physics_fast.py
+    test_physics_hybrid.py
+    test_physics_init.py
+    test_physics_realistic.py
+    test_physics.py
+.gitignore
+LICENSE
+LIVE_TRADING.md
+MY_INTERNAL_NOTES.md
+README.md
+requirements.txt
+setup.py
+```
 
 ### Why SchwabGym?
 
-**The Problem**: Most trading simulators fail when agents are deployed to production because they don't model realistic market microstructure, execution friction, or API-specific constraints. Agents trained on idealized fills and zero slippage crash when they encounter real-world markets.
+**The Problem**: Most trading simulators fail when agents are deployed to production because they don't model realistic market microstructure, execution friction, or API-specific constraints. Agents trained on idealized fills and zero slippage often underperform in real-world markets.
 
-**The Solution**: SchwabGym implements institutional-grade physics including the Square Root Law of market impact, volume-constrained fills, and regulatory constraints (PDT rules, SEC/FINRA fees, margin requirements). It replicates the exact JSON schemas, authentication flows, and error modes of the Schwab Trader API.
+**The Solution**: SchwabGym implements realistic market physics including the Square Root Law of market impact, volume-constrained fills, and regulatory constraints (PDT rules, SEC/FINRA fees, margin requirements). It replicates the JSON schemas and authentication flows of the Schwab Trader API.
 
-**The Result**: Agents trained in SchwabGym deploy to live trading with confidence, having already experienced realistic execution conditions during training.
+**The Result**: Agents trained in SchwabGym can be deployed to live trading with greater confidence, having already experienced realistic execution conditions during training.
 
 ---
 
 ## 🎯 Key Features
 
-### Production-Grade Market Physics
-- **Square Root Law Market Impact**: Implements the empirically-validated `ΔP = Y×σ×sqrt(Q/V)` model used by institutional traders
+### Realistic Market Physics
+- **Square Root Law Market Impact**: Implements the `ΔP = Y×σ×sqrt(Q/V)` model to simulate slippage
 - **Volume-Constrained Fills**: Limit orders fill probabilistically based on available liquidity
 - **Brownian Bridge Simulation**: Generates realistic intraday price paths for path-dependent orders
-- **Bid-Ask Spread**: Simulates realistic spread crossing costs
-- **Regulatory Friction**: Accurate SEC Section 31 fees (including 2025 rate changes), FINRA TAF, and exchange fees
+- **Bid-Ask Spread**: Simulates spread crossing costs
+- **Regulatory Friction**: Estimates SEC Section 31 fees, FINRA TAF, and exchange fees
 
 ### Schwab API Fidelity
-- **Perfect Schema Matching**: Every JSON response mirrors the production API structure
-- **OAuth Flow Simulation**: Token lifecycle management, expiration, and refresh logic
+- **Schema Matching**: JSON responses mirror the production API structure
+- **OAuth Flow Simulation**: Token lifecycle management logic
 - **Account Hash System**: Enforces Schwab's encrypted account identifier workflow
 - **Pattern Day Trading**: Full PDT rule enforcement (4 day trades in 5 days = account restriction)
 - **Margin Requirements**: Regulation T initial margin (50%) and maintenance margin (30%)
 
 ### Deep Learning Optimized
-- **GPU-Friendly**: Minimal CPU overhead, designed for GPU-accelerated neural network training
 - **Gymnasium Compatible**: Drop-in replacement for OpenAI Gym with Stable Baselines3 support
-- **Vectorization Ready**: Scales to 16+ parallel environments without bottlenecks
+- **Vectorization Ready**: Supports parallel environments
 - **Domain Randomization**: Hybrid physics modes for robust Sim-to-Real transfer
 
-### Zero-Code Deployment
+### Minimal Code Deployment
 ```python
 # Training
 from schwabgym import MockClient
 client = MockClient(df)
 
-# Live Trading (one line change)
+# Live Trading (minimal changes)
 from schwab.client import Client  # Real Schwab API
 client = auth.easy_client(...)     # Everything else identical
 ```
@@ -122,9 +166,9 @@ def make_env():
 
 env = SubprocVecEnv([make_env for _ in range(4)])
 
-# Train PPO agent (GPU automatically detected)
-model = PPO('MlpPolicy', env, verbose=1, device='auto')
-model.learn(total_timesteps=10_000_000)
+# Train PPO agent
+model = PPO('MlpPolicy', env, verbose=1)
+model.learn(total_timesteps=1_000_000)
 
 # Evaluate
 obs, _ = env.reset()
@@ -133,7 +177,7 @@ for _ in range(1000):
     obs, reward, done, truncated, info = env.step(action)
 
 # Visualize
-env.envs[0].render_chart()
+env.envs[0].render()
 ```
 
 ---
@@ -162,7 +206,7 @@ SchwabGym supports two execution modes:
 
 #### Realistic Mode (Default)
 
-**Recommended for production training.** Implements institutional-grade market microstructure:
+**Recommended for production training.** Implements realistic market microstructure:
 
 ```python
 from schwabgym.physics import RealisticExecutionEngine
@@ -182,8 +226,6 @@ client = MockClient(df, execution_engine=engine)
 - Brownian Bridge intraday path generation
 - Pessimistic execution (agent sees worst-case fills)
 
-**Speed**: ~1,000-2,000 steps/second (CPU), ~5,000-10,000 steps/second (GPU training)
-
 **Use When**: Training production-bound agents, final validation
 
 #### Fast Mode (Testing/Prototyping)
@@ -202,9 +244,7 @@ client = MockClient(df, execution_engine=engine)
 - Binary limit order fills (price touched = filled)
 - Minimal computational overhead
 
-**Speed**: ~10,000-20,000 steps/second
-
-**Use When**: Debugging strategy logic, quick prototypes, testing on CPU
+**Use When**: Debugging strategy logic, quick prototypes
 
 ---
 
@@ -264,17 +304,17 @@ response = client.place_order(account_hash, order)
 
 This forces agents to learn position sizing and holding periods appropriate for their capital level.
 
-### Regulatory Fees (2025-Aware)
+### Regulatory Fees
 
 ```python
-# Built-in fee calculator accounts for May 2025 SEC rate change
+# Built-in fee calculator accounts for SEC and FINRA fees
 fee_calculator.calculate_sec_fee(
-    transaction_date=datetime.date(2024, 12, 1),  # Returns $27.80/million
-    transaction_date=datetime.date(2025, 6, 1),   # Returns $0.00/million
+    transaction_date=datetime.date(2024, 12, 1),
+    notional_value=100000
 )
 ```
 
-Ensures agents trained on historical data learn the correct fee structure for future deployment.
+Ensures agents trained on historical data learn the correct fee structure.
 
 ### Almgren-Chriss Optimal Execution
 
@@ -345,22 +385,8 @@ reward = log(new_equity / old_equity)
 Log returns ensure reward scale consistency across different account sizes and price levels.
 
 **Terminal conditions**:
-- Account value < $15,000 (margin call) → Large negative reward
-- End of data reached → Episode truncation
-
----
-
-## Performance Benchmarks
-
-Tested on Colab Pro (T4 GPU) training 10M steps:
-
-| Configuration | Time | Steps/Sec | Use Case |
-|---------------|------|-----------|----------|
-| **Realistic (1 env)** | 45 min | 3,700 | Single-asset strategies |
-| **Realistic (4 envs)** | 30 min | 11,100 | Multi-environment training |
-| **Fast (4 envs)** | 12 min | 13,900 | Quick prototypes |
-
-**Note**: GPU acceleration primarily benefits the neural network (PPO forward/backward passes). The physics engine runs on CPU and is not the bottleneck in GPU training.
+- Account value < 50% of initial capital (margin call)
+- End of data reached
 
 ---
 
@@ -486,7 +512,7 @@ client = auth.easy_client(
 - `client.place_order(hash, order)` → Same method signature
 - `client.account_details(hash)` → Same response format
 
-**No other code changes needed!**
+**Minimal code changes needed!**
 
 ---
 
@@ -505,7 +531,7 @@ pytest tests/test_mock_client.py::TestPatternDayTrading -v
 
 Test coverage includes:
 - Order execution accuracy
-- Fee calculations (pre/post 2025)
+- Fee calculations
 - PDT rule enforcement
 - Market impact modeling
 - Data loader edge cases
