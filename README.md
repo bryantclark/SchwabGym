@@ -616,7 +616,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 - **Documentation**: [schwabgym.readthedocs.io](https://schwabgym.readthedocs.io) (coming soon)
 - **Issues**: [GitHub Issues](https://github.com/bryantclark/SchwabGym/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/bryantclark/SchwabGym/discussions)
-- **Email**: bryant.clark@example.com
 
 ---
 
