@@ -2,7 +2,7 @@
 SchwabGym Core Client
 =====================
 
-Simulator that replicates the Charles Schwab Trader API for training reinforcement learning agents.
+Simulator that replicates the Charles Schwab Trader API.
 
 Author: Bryant Clark
 Repository: https://github.com/bryantclark/SchwabGym
@@ -27,7 +27,7 @@ class MockClient:
     Simulator of schwab.client.Client.
     
     This class provides API compatibility with schwab-py, enabling agents
-    to be trained in simulation and deployed to live trading.
+    to be trained in simulation using the same interface used for live trading.
     
     Attributes:
         df (pd.DataFrame): Historical OHLCV data with dual-price columns
@@ -95,7 +95,7 @@ class MockClient:
         self.opened_positions_today: set = set()  # Symbols opened today
         self._is_pdt_flagged = False
         
-        # Physics engine (defaults to realistic for production)
+        # Physics engine (defaults to realistic)
         if execution_engine is None:
             self.execution_engine = RealisticExecutionEngine()
             logger.info("Using RealisticExecutionEngine")

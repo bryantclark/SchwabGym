@@ -26,29 +26,10 @@ class AlmgrenChrissOptimalExecutor:
     Splits a large "parent" order into multiple "child" orders
     over time to balance market impact vs. timing risk.
     
-    This is typically used BEFORE the execution engine - it determines
-    the schedule, then each child order goes through the execution engine.
-    
     The framework solves:
         minimize: E[Cost] + λ × Var[Cost]
     
     Where λ is the trader's risk aversion parameter.
-    
-    Example:
-        >>> from schwabgym.physics import AlmgrenChrissOptimalExecutor
-        >>> 
-        >>> executor = AlmgrenChrissOptimalExecutor(lambda_risk=0.01)
-        >>> 
-        >>> # Need to sell 50,000 shares over 1 day
-        >>> trajectory = executor.compute_trajectory(
-        ...     total_shares=50000,
-        ...     T=1.0,      # 1 trading day
-        ...     N=10,       # 10 child orders
-        ...     volatility=0.02  # 2% daily vol
-        ... )
-        >>> 
-        >>> print(trajectory)
-        >>> # [8431, 6890, 5893, ...] - front-loaded schedule
     """
     
     def __init__(
@@ -63,7 +44,7 @@ class AlmgrenChrissOptimalExecutor:
         Args:
             lambda_risk (float): Risk aversion parameter
                 - 0.0 = risk neutral (minimize expected cost)
-                - 0.01 = typical institutional risk aversion (DEFAULT)
+                - 0.01 = typical institutional risk aversion (default)
                 - 0.1+ = very risk averse (execute quickly)
             eta_temp (float): Temporary impact coefficient
             gamma_perm (float): Permanent impact coefficient
@@ -102,21 +83,6 @@ class AlmgrenChrissOptimalExecutor:
             
         Returns:
             np.ndarray: Shares to trade each period [q_1, q_2, ..., q_N]
-            
-        Example:
-            >>> executor = AlmgrenChrissOptimalExecutor(lambda_risk=0.01)
-            >>> 
-            >>> # Liquidate 50k shares over 1 day in 10 slices
-            >>> schedule = executor.compute_trajectory(
-            ...     total_shares=50000,
-            ...     T=1.0,
-            ...     N=10,
-            ...     volatility=0.02
-            ... )
-            >>> 
-            >>> print(f"First period: {schedule[0]} shares")
-            >>> print(f"Last period: {schedule[-1]} shares")
-            >>> # Front-loaded: First > Last due to risk aversion
         """
         X = total_shares
         tau = T / N

@@ -2,8 +2,8 @@
 SchwabGym Realistic Execution Engine
 =====================================
 
-Institutional-grade market microstructure simulation.
-This is the DEFAULT engine for production training.
+Market microstructure simulation engine.
+This is the default engine for simulations.
 
 Author: Bryant Clark
 Repository: https://github.com/bryantclark/SchwabGym
@@ -20,26 +20,12 @@ logger = logging.getLogger(__name__)
 
 class RealisticExecutionEngine(ExecutionEngine):
     """
-    Realistic execution model based on empirical market microstructure.
-    
-    **THIS IS THE DEFAULT ENGINE** - optimized for GPU training.
+    Execution model based on empirical market microstructure.
     
     Implements:
     - Square Root Law of market impact: ΔP = Y×σ×sqrt(Q/V)
     - Volume-based fill probabilities
     - Brownian Bridge for intraday paths (optional)
-    
-    Speed: ~1,000-2,000 steps/second (CPU), ~5,000-10,000 with GPU training
-    
-    Use when:
-    - Training production-bound agents (DEFAULT)
-    - Final validation before live deployment
-    - GPU training (overhead is negligible)
-    
-    Example:
-        >>> from schwabgym.physics import RealisticExecutionEngine
-        >>> engine = RealisticExecutionEngine(impact_coefficient=0.7)
-        >>> client = MockClient(df, execution_engine=engine)
     """
     
     def __init__(
@@ -54,7 +40,7 @@ class RealisticExecutionEngine(ExecutionEngine):
         Args:
             impact_coefficient (float): Y in Square Root Law (0.5-1.0 typical)
                 - 0.5: Liquid large-cap stocks
-                - 0.7: Typical stocks (DEFAULT)
+                - 0.7: Typical stocks (default)
                 - 1.0: Illiquid small-cap stocks
             participation_rate (float): Max fraction of volume (default: 10%)
             queue_depth_factor (float): Estimated orders ahead (default: 2.0)
@@ -84,9 +70,6 @@ class RealisticExecutionEngine(ExecutionEngine):
             σ = volatility (estimated from High-Low range)
             Q = order quantity
             V = period volume
-            
-        This is the empirically-validated market impact model used
-        by institutional traders worldwide.
         """
         # Extract market microstructure data
         high = market_data.get('High', base_price * 1.01)
@@ -133,9 +116,6 @@ class RealisticExecutionEngine(ExecutionEngine):
             α = participation rate (can't be more than X% of volume)
             Q = our order size
             β = estimated queue depth ahead of us
-            
-        This models the reality that limit orders don't always fill
-        even when price touches, due to queue position and liquidity.
         """
         # First check: did price even touch our limit?
         price_touched = market_low <= limit_price <= market_high
@@ -175,10 +155,6 @@ class RealisticExecutionEngine(ExecutionEngine):
         - Starts at open_price
         - Ends at close
         - Respects high and low bounds
-        - Maintains realistic statistical properties
-        
-        This is used for advanced limit order simulation where we need
-        to know the SEQUENCE of prices, not just the OHLC summary.
         
         Args:
             open_price (float): Bar open
