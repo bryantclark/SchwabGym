@@ -1,0 +1,64 @@
+MY_INTERNAL_NOTES.md
+
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Data
+*.csv
+*.parquet
+*.h5
+data/
+*.zip
+
+# Model checkpoints
+models/
+checkpoints/
+*.pkl
+*.pth
+*.h5
+
+# Schwab tokens 
+token.json
+*.token
+credentials/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+```
