@@ -2,12 +2,46 @@
 
 **A high-fidelity reinforcement learning environment for training algorithmic trading agents on the Charles Schwab platform.**
 
+[![CI](https://github.com/bryantclark/SchwabGym/actions/workflows/ci.yml/badge.svg)](https://github.com/bryantclark/SchwabGym/actions/workflows/ci.yml)
+[![TestPyPI](https://github.com/bryantclark/SchwabGym/actions/workflows/release.yml/badge.svg)](https://github.com/bryantclark/SchwabGym/actions/workflows/release.yml)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PyPI](https://badge.fury.io/py/schwabgym.svg)](https://badge.fury.io/py/schwabgym)
 
 Developed by [Bryant Clark](https://github.com/bryantclark)
 
 ---
+
+## Publishing & Secrets
+
+This repository includes a two-stage release workflow that first publishes to TestPyPI and then — after manual approval in the `production` environment — publishes to PyPI.
+
+1) Create API tokens
+    - TestPyPI: create an API token at https://test.pypi.org/manage/account/#api-tokens and copy the token.
+    - PyPI: create an API token at https://pypi.org/manage/account/#api-tokens and copy the token.
+
+2) Add repository secrets
+    - In GitHub: `Settings` → `Secrets and variables` → `Actions` → `New repository secret`.
+    - Add `TEST_PYPI_API_TOKEN` (token from TestPyPI).
+    - Add `PYPI_API_TOKEN` (token from PyPI).
+
+3) Configure environment protection for production
+    - In GitHub: `Settings` → `Environments` → `New environment` and create `production`.
+    - Add required reviewers so the `publish-prod` job requires manual approval before running.
+
+4) Trigger a release (local)
+
+```bash
+# create a version tag locally
+git tag v0.1.0
+# push the tag to GitHub (this triggers the release workflow)
+git push origin v0.1.0
+```
+
+Notes
+- The workflow publishes to TestPyPI using `TEST_PYPI_API_TOKEN` and creates a test GitHub Release.
+- After test publish completes, the `publish-prod` job will wait for approval in the `production` environment and then publish to PyPI using `PYPI_API_TOKEN`.
+- Do not store tokens in source — keep them only in GitHub Secrets.
 
 ## Overview
 
