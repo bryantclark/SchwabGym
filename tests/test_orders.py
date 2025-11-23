@@ -105,5 +105,7 @@ class TestMockOptions:
 
     def test_option_with_price(self):
         # Test internal _base_option_order with price
-        order = MockOptions._base_option_order("AAPL_230616C150", 1, "BUY_TO_OPEN", "LIMIT", price=5.5)
+        order = MockOptions._base_option_order(
+            "AAPL_230616C150", 1, "BUY_TO_OPEN", "LIMIT", price=5.5
+        )
         assert order["price"] == "5.50"

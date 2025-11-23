@@ -147,18 +147,18 @@ class TestMockClient:
         # Place limit buy at 100
         order = eq.equity_buy_limit("AAPL", 10, 100.0)
         fast_client.place_order(fast_client.account_hash, order)
-        
+
         # 1. Price above limit -> No fill
         # Manually update dataframe at current step
         idx = fast_client.df.index[fast_client.current_step]
-        fast_client.df.at[idx, 'Low'] = 105.0
-        fast_client.df.at[idx, 'High'] = 110.0
-        
+        fast_client.df.at[idx, "Low"] = 105.0
+        fast_client.df.at[idx, "High"] = 110.0
+
         fast_client._process_working_orders()
         assert len(fast_client.working_orders) == 1
-        
+
         # 2. Price drops to limit -> Fill
-        fast_client.df.at[idx, 'Low'] = 99.0
+        fast_client.df.at[idx, "Low"] = 99.0
         fast_client._process_working_orders()
         assert len(fast_client.working_orders) == 0
 
@@ -167,12 +167,12 @@ class TestMockClient:
         # Test invalid account hash
         resp = client.get_account("invalid_hash")
         assert resp.status_code == 401
-        
+
         # Test order for invalid account
         order = eq.equity_buy_market("AAPL", 10)
         resp = client.place_order("invalid_hash", order)
         assert resp.status_code == 401
-        
+
         # Test cancel invalid order
         # cancel_order not implemented in MockClient yet, skipping or removing test
         # resp = client.cancel_order("invalid_hash", 99999)

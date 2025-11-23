@@ -7,9 +7,10 @@ Unit tests for the SchwabTradingEnv Gymnasium environment.
 Author: Bryant Clark
 """
 
+from unittest.mock import patch
+
 import numpy as np
 import pytest
-from unittest.mock import patch
 
 from schwabgym import SchwabTradingEnv, load_and_clean_data
 from schwabgym.environment import ZScoreNormalizer
@@ -149,19 +150,20 @@ class TestSchwabTradingEnv:
     def test_render_chart(self, env):
         """Test chart rendering."""
         obs, _ = env.reset()
-        
+
         # Step a few times to generate history
         for _ in range(5):
             action = env.action_space.sample()
             env.step(action)
-            
+
         # Test render 'chart' mode
         # We mock plt.show to avoid opening a window during tests
-        with patch('matplotlib.pyplot.show'):
-            env.render_mode = 'chart'
+        with patch("matplotlib.pyplot.show"):
+            env.render_mode = "chart"
             env.render()
-            
+
         # Test render 'human' mode
+
     def test_rsi_flat_prices(self, env):
         """Test RSI calculation with flat prices (no gains/losses)."""
         prices = np.array([100.0] * 20)
