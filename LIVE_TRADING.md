@@ -87,7 +87,7 @@ positions = acct['securitiesAccount'].get('positions', [])
 for pos in positions:
     symbol = pos['instrument']['symbol']
     qty = pos['longQuantity'] if pos['longQuantity'] > 0 else pos['shortQuantity']
-    
+
     # Place market order to close
     if pos['longQuantity'] > 0:
         order = eq.equity_sell_market(symbol, qty)
