@@ -300,7 +300,7 @@ Phase 1: Prototype (Fast Mode)
 ↓ Iterate on strategy logic quickly
 ↓ Find promising approaches
 ↓
-Phase 2: Train (Hybrid Mode)  
+Phase 2: Train (Hybrid Mode)
 ↓ Train RL agent with domain randomization
 ↓ 10M+ steps with robust physics
 ↓

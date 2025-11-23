@@ -28,7 +28,6 @@ jobs:
           ls -la distcheck
 
   test:
-  test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
