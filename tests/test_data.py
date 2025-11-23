@@ -246,6 +246,87 @@ class TestSplitTrainTest:
         except (ValueError, IndexError):
             pass  # Acceptable behavior
 
+    def test_nan_handling(self, tmp_path):
+        """Test that NaNs are filled."""
+        # Create CSV with NaNs
+        df = pd.DataFrame({
+            'timestamp': pd.date_range('2024-01-01', periods=10),
+            'open': [100.0] * 9 + [np.nan],
+            'high': [101.0] * 10,
+            'low': [99.0] * 10,
+            'close': [100.0] * 10,
+            'volume': [1000] * 10
+        })
+        csv_path = tmp_path / "nan_test.csv"
+        df.to_csv(csv_path, index=False)
+        
+        loaded_df = load_and_clean_data(str(csv_path))
+        assert not loaded_df.isnull().any().any()
+        
+    def test_negative_price_handling(self, tmp_path):
+        """Test that negative prices are filtered."""
+        df = pd.DataFrame({
+            'timestamp': pd.date_range('2024-01-01', periods=10),
+            'open': [100.0] * 9 + [-50.0],  # One negative price
+            'high': [101.0] * 10,
+            'low': [99.0] * 10,
+            'close': [100.0] * 10,
+            'volume': [1000] * 10
+        })
+        csv_path = tmp_path / "neg_test.csv"
+        df.to_csv(csv_path, index=False)
+        
+        loaded_df = load_and_clean_data(str(csv_path))
+        assert (loaded_df['Open'] > 0).all()
+    def test_timestamp_error(self, tmp_path):
+        """Test timestamp parsing error."""
+        df = pd.DataFrame({
+            'timestamp': ['invalid_date'] * 10,
+            'open': [100.0] * 10,
+            'high': [101.0] * 10,
+            'low': [99.0] * 10,
+            'close': [100.0] * 10,
+            'volume': [1000] * 10
+        })
+        csv_path = tmp_path / "bad_time.csv"
+        df.to_csv(csv_path, index=False)
+        
+        with pytest.raises(ValueError, match="Could not parse timestamp"):
+            load_and_clean_data(str(csv_path))
+
+    def test_missing_close_column(self, tmp_path):
+        """Test handling of missing close column (use adj_close)."""
+        df = pd.DataFrame({
+            'timestamp': pd.date_range('2024-01-01', periods=10),
+            'open': [100.0] * 10,
+            'high': [101.0] * 10,
+            'low': [99.0] * 10,
+            'adj_close': [100.0] * 10, # Only adj_close
+            'volume': [1000] * 10
+        })
+        csv_path = tmp_path / "no_close.csv"
+        df.to_csv(csv_path, index=False)
+        
+        loaded_df = load_and_clean_data(str(csv_path))
+        assert 'Close' in loaded_df.columns
+        assert (loaded_df['Close'] == loaded_df['AdjClose']).all()
+
+    def test_negative_volume(self, tmp_path):
+        """Test negative volume handling."""
+        df = pd.DataFrame({
+            'timestamp': pd.date_range('2024-01-01', periods=10),
+            'open': [100.0] * 10,
+            'high': [101.0] * 10,
+            'low': [99.0] * 10,
+            'close': [100.0] * 10,
+            'volume': [-100] * 10 # Negative volume
+        })
+        csv_path = tmp_path / "neg_vol.csv"
+        df.to_csv(csv_path, index=False)
+        
+        loaded_df = load_and_clean_data(str(csv_path))
+        assert (loaded_df['Volume'] == 0).all()
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
