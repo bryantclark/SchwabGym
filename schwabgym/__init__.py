@@ -2,7 +2,7 @@
 SchwabGym: High-Fidelity RL Environment for Algorithmic Trading
 ================================================================
 
-A production-grade trading simulator designed for training deep reinforcement
+Trading simulator designed for training deep reinforcement
 learning agents that deploy to live markets via the Charles Schwab API.
 
 Author: Bryant Clark
@@ -10,11 +10,11 @@ Repository: https://github.com/bryantclark/SchwabGym
 License: MIT
 
 Key Features:
-    - Perfect API parity with schwab-py
+    - Perfect API parity with schwab-py (at least that is the goal)
     - Institutional-grade market physics (Square Root Law)
     - Pattern Day Trading enforcement
     - Regulatory fee calculations (SEC, FINRA)
-    - Gymnasium-compatible RL environment
+    - Gymnasium-compatible RL environment shell
     - Zero-code deployment to live trading
 
 Example Usage:
@@ -25,18 +25,29 @@ Example Usage:
     >>> client = MockClient(df, initial_cash=25000)
     >>>
     >>> # Trading exactly like schwab-py
-    >>> account_hash = client.account_linked().json()['hashValue']
-    >>> quote = client.quote('AAPL')
+    >>> account_hash = client.get_account_numbers().json()['hashValue']
+    >>> quote = client.get_quotes('AAPL')
     >>> order = eq.equity_buy_market('AAPL', 100)
     >>> client.place_order(account_hash, order)
 
-For RL Training:
+For RL Training (Batteries-Included Pattern):
     >>> from schwabgym import SchwabTradingEnv
-    >>> from stable_baselines3 import PPO
+    >>> from gymnasium import spaces
     >>>
-    >>> env = SchwabTradingEnv(df, ticker='AAPL')
-    >>> model = PPO('MlpPolicy', env, device='cuda')
-    >>> model.learn(total_timesteps=10_000_000)
+    >>> # 1. Define your strategy's view of the world
+    >>> def my_reward_fn(client): return 0.0
+    >>> def my_action_fn(client, action): pass
+    >>> def my_obs_fn(client): return []
+    >>>
+    >>> # 2. Inject into the generic environment
+    >>> env = SchwabTradingEnv(
+    >>>     client=client,
+    >>>     observation_fn=my_obs_fn,
+    >>>     reward_fn=my_reward_fn,
+    >>>     action_fn=my_action_fn,
+    >>>     observation_space=spaces.Box(...),
+    >>>     action_space=spaces.Box(...)
+    >>> )
 """
 
 __version__ = "1.0.0"

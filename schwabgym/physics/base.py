@@ -46,7 +46,7 @@ class ExecutionEngine(ABC):
         Returns:
             float: Actual execution price
         """
-        pass
+        pass  # pragma: no cover
 
     @abstractmethod
     def should_limit_fill(
@@ -70,4 +70,4 @@ class ExecutionEngine(ABC):
         Returns:
             bool: True if order fills
         """
-        pass
+        pass  # pragma: no cover

@@ -96,7 +96,8 @@ def load_and_clean_data(filepath: str, symbol: Optional[str] = None) -> pd.DataF
 
     if "timestamp" in df.columns:
         try:
-            df["timestamp"] = pd.to_datetime(df["timestamp"])
+            # Use format='mixed' to handle inconsistent formats without warning
+            df["timestamp"] = pd.to_datetime(df["timestamp"], format="mixed")
             df.set_index("timestamp", inplace=True)
             df.sort_index(ascending=True, inplace=True)
             logger.info(f"Data range: {df.index[0]} to {df.index[-1]}")
@@ -164,8 +165,9 @@ def load_and_clean_data(filepath: str, symbol: Optional[str] = None) -> pd.DataF
     # Check for NaN values
     if df.isnull().any().any():
         logger.warning("Found NaN values, forward filling...")
-        df.fillna(method="ffill", inplace=True)
-        df.fillna(method="bfill", inplace=True)
+        # Updated to use ffill/bfill to silence FutureWarning
+        df.ffill(inplace=True)
+        df.bfill(inplace=True)
 
     # Check for non-positive prices
     price_cols = ["Open", "High", "Low", "Close", "AdjClose"]

@@ -3,14 +3,15 @@ Reinforcement Learning Training Example
 ========================================
 
 Train a PPO agent to trade using the Schwab simulator environment.
-
-Author: Your Name
 """
 
 import os
 import sys
 
-# Add parent directory to path so we can import schwabgym
+import numpy as np
+from gymnasium import spaces
+
+# Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import logging
@@ -19,237 +20,173 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
-from schwabgym.data import load_and_clean_data, split_train_test
-from schwabgym.environment import SchwabTradingEnv
+from schwabgym import MockClient, load_and_clean_data, split_train_test
+from schwabgym.environment import SchwabTradingEnv, ZScoreNormalizer
+from schwabgym.orders import MockEquities as eq
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# =============================================================================
+# STRATEGY DEFINITIONS (The "Opinions")
+# =============================================================================
+
+
+class StrategyObservationBuilder:
+    """Defines the Agent's view of the world (State)."""
+
+    def __init__(self, ticker):
+        self.ticker = ticker
+        self.normalizer = ZScoreNormalizer(shape=(8,))
+
+    def reset(self):
+        self.normalizer.reset()
+
+    def __call__(self, client: MockClient) -> np.ndarray:
+        # 1. Get Data
+        hist = client.get_price_history(self.ticker).json()["candles"]
+        prices = np.array([c["close"] for c in hist], dtype=np.float32)
+
+        # 2. Calc Indicators (The "Opinionated" part)
+        rsi = self._calc_rsi(prices)
+        sma = np.mean(prices[-20:]) if len(prices) >= 20 else prices[-1]
+
+        # 3. Get Account State
+        account_hash = client.get_account_numbers().json()["hashValue"]
+        acct = client.get_account(account_hash).json()["securitiesAccount"]
+
+        # Find position
+        position_size = 0
+        for pos in acct.get("positions", []):
+            if pos["instrument"]["symbol"] == self.ticker:
+                position_size = (
+                    pos["longQuantity"]
+                    if pos["longQuantity"] > 0
+                    else -pos["shortQuantity"]
+                )
+
+        # 4. Assemble Vector
+        current_price = prices[-1]
+        raw_obs = np.array(
+            [
+                rsi,
+                current_price / sma,
+                position_size / 1000.0,
+                # ... add other features as desired ...
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,  # Padding to match old shape of 8 for demo
+            ],
+            dtype=np.float32,
+        )
+
+        return self.normalizer.normalize(raw_obs)
+
+    def _calc_rsi(self, prices, period=14):
+        if len(prices) < period + 1:
+            return 50.0
+        delta = np.diff(prices[-period - 1 :])
+        gains = delta[delta > 0].sum() / period
+        losses = -delta[delta < 0].sum() / period
+        if losses == 0:
+            return 100.0 if gains > 0 else 50.0
+        return 100 - (100 / (1 + gains / losses))
+
+
+def strategy_reward_fn(client: MockClient) -> float:
+    """Defines the Agent's goal (Reward)."""
+    # Simple Log Returns
+    current_nav = client._calculate_equity()  # Using helper for speed
+
+    # We need previous NAV to calc return.
+    # A simple stateless hack is to store it on the client or use a wrapper class.
+    # For this demo, let's assume a simple attribute injection:
+    prev_nav = getattr(client, "_prev_nav", client.initial_cash)
+
+    ret = np.log(current_nav / prev_nav) if prev_nav > 0 else 0.0
+    client._prev_nav = current_nav
+
+    return float(ret)
+
+
+def strategy_action_fn(client: MockClient, action: np.ndarray):
+    """Defines how Agent actions translate to Orders."""
+    ticker = "AAPL"  # Hardcoded for single-agent demo
+    account_hash = client.get_account_numbers().json()["hashValue"]
+
+    # Continuous action: [Signal (-1 to 1), Size (0 to 1)]
+    signal = float(action[0])
+    size_pct = float(action[1])
+
+    if signal > 0.33:  # BUY
+        # Logic to place buy order...
+        order = eq.equity_buy_market(ticker, 10)  # Simplified size for demo
+        client.place_order(account_hash, order)
+
+    elif signal < -0.33:  # SELL
+        # Logic to place sell order...
+        order = eq.equity_sell_market(ticker, 10)  # Simplified size
+        client.place_order(account_hash, order)
+
+
+def strategy_termination_fn(client: MockClient) -> bool:
+    """Defines fail states."""
+    nav = client._calculate_equity()
+    return nav < 15000.0  # Margin call
+
+
+# =============================================================================
+# TRAINING LOOP
+# =============================================================================
 
 
 def train_rl_agent(
-    ticker: str = "AAPL",
-    data_path: str = "../data/AAPL_5min.csv",
-    total_timesteps: int = 100000,
-    save_path: str = "./models/",
+    ticker="AAPL",
+    data_path="../data/AAPL_5min.csv",
+    total_timesteps=100000,
+    save_path="./models/",
 ):
-    """
-    Train a PPO agent for algorithmic trading.
-
-    Args:
-        ticker (str): Symbol to trade
-        data_path (str): Path to historical data
-        total_timesteps (int): Total training steps
-        save_path (str): Directory to save models
-    """
-    logger.info("=" * 60)
-    logger.info("RL AGENT TRAINING")
-    logger.info("=" * 60)
-
-    # Resolve data path
     if not os.path.isabs(data_path):
         data_path = os.path.join(os.path.dirname(__file__), data_path)
 
-    # Load and split data
-    logger.info(f"Loading data for {ticker}...")
     df = load_and_clean_data(data_path, symbol=ticker)
-    train_df, test_df = split_train_test(df, train_ratio=0.8)
-
-    logger.info(f"Train size: {len(train_df)} | Test size: {len(test_df)}")
-
-    # Create training environment
-    logger.info("Creating training environment...")
+    train_df, _ = split_train_test(df, train_ratio=0.8)
 
     def make_env():
-        return SchwabTradingEnv(train_df, ticker=ticker, initial_cash=25000)
+        # 1. Create the Simulator
+        client = MockClient(train_df, initial_cash=25000)
 
-    env = DummyVecEnv([make_env])
-    env = VecNormalize(env, norm_obs=True, norm_reward=True)
+        # 2. Create the Strategy Wrappers
+        obs_builder = StrategyObservationBuilder(ticker)
 
-    # Create evaluation environment
-    eval_env = DummyVecEnv(
-        [lambda: SchwabTradingEnv(test_df, ticker=ticker, initial_cash=25000)]
-    )
-    eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=False)
-
-    # Create callbacks
-    os.makedirs(save_path, exist_ok=True)
-
-    eval_callback = EvalCallback(
-        eval_env,
-        best_model_save_path=save_path,
-        log_path=save_path,
-        eval_freq=5000,
-        deterministic=True,
-        render=False,
-    )
-
-    checkpoint_callback = CheckpointCallback(
-        save_freq=10000, save_path=save_path, name_prefix="rl_model"
-    )
-
-    # Initialize PPO agent
-    logger.info("Initializing PPO agent...")
-
-    model = PPO(
-        "MlpPolicy",
-        env,
-        learning_rate=3e-4,
-        n_steps=2048,
-        batch_size=64,
-        n_epochs=10,
-        gamma=0.99,
-        gae_lambda=0.95,
-        clip_range=0.2,
-        verbose=1,
-        tensorboard_log=f"{save_path}/tensorboard/",
-    )
-
-    logger.info("=" * 60)
-    logger.info("TRAINING CONFIGURATION")
-    logger.info("=" * 60)
-    logger.info(f"Total timesteps: {total_timesteps:,}")
-    logger.info(f"Learning rate: 3e-4")
-    logger.info(f"Batch size: 64")
-    logger.info(f"Save path: {save_path}")
-    logger.info("=" * 60)
-
-    # Train
-    logger.info("\nStarting training...")
-
-    try:
-        model.learn(
-            total_timesteps=total_timesteps,
-            callback=[eval_callback, checkpoint_callback],
-            progress_bar=True,
+        # 3. Inject into the Generic Env
+        return SchwabTradingEnv(
+            client=client,
+            observation_fn=obs_builder,
+            reward_fn=strategy_reward_fn,
+            action_fn=strategy_action_fn,
+            termination_fn=strategy_termination_fn,
+            observation_space=spaces.Box(
+                low=-10, high=10, shape=(8,), dtype=np.float32
+            ),
+            action_space=spaces.Box(
+                low=np.array([-1, 0]), high=np.array([1, 1]), dtype=np.float32
+            ),
         )
 
-        # Save final model
-        final_model_path = os.path.join(save_path, "final_model")
-        model.save(final_model_path)
-        env.save(os.path.join(save_path, "vec_normalize.pkl"))
+    env = DummyVecEnv([make_env])
+    env = VecNormalize(
+        env, norm_obs=False, norm_reward=True
+    )  # Obs normalized manually in builder
 
-        logger.info(f"\nTraining complete! Model saved to {final_model_path}")
+    model = PPO("MlpPolicy", env, verbose=1)
+    model.learn(total_timesteps=total_timesteps)
+    model.save(os.path.join(save_path, "final_model"))
 
-    except KeyboardInterrupt:
-        logger.info("\nTraining interrupted by user")
-        model.save(os.path.join(save_path, "interrupted_model"))
-
-    # Evaluate on test set
-    logger.info("\n" + "=" * 60)
-    logger.info("EVALUATING ON TEST SET")
-    logger.info("=" * 60)
-
-    test_env = SchwabTradingEnv(test_df, ticker=ticker, initial_cash=25000)
-    obs, _ = test_env.reset()
-
-    episode_reward = 0
-    done = False
-
-    while not done:
-        action, _ = model.predict(obs, deterministic=True)
-        obs, reward, terminated, truncated, info = test_env.step(action)
-        episode_reward += reward
-        done = terminated or truncated
-
-    final_nav = info.get("nav", 25000)  # Default if not in info
-    initial_capital = 25000
-    test_return = ((final_nav - initial_capital) / initial_capital) * 100
-
-    logger.info(f"Test Episode Reward: {episode_reward:.4f}")
-    logger.info(f"Test Return: {test_return:+.2f}%")
-    logger.info(f"Final NAV: ${final_nav:,.2f}")
-
-    # Visualize results
-    # logger.info("\nGenerating performance chart...")
-    # test_env.render_chart()
-
-    return model, test_return
-
-
-def load_and_evaluate(
-    model_path: str, ticker: str = "AAPL", data_path: str = "../data/AAPL_5min.csv"
-):
-    """
-    Load a trained model and evaluate it.
-
-    Args:
-        model_path (str): Path to saved model
-        ticker (str): Symbol to trade
-        data_path (str): Path to test data
-    """
-    logger.info(f"Loading model from {model_path}")
-
-    # Resolve data path
-    if not os.path.isabs(data_path):
-        data_path = os.path.join(os.path.dirname(__file__), data_path)
-
-    # Load model
-    model = PPO.load(model_path)
-
-    # Load test data
-    df = load_and_clean_data(data_path, symbol=ticker)
-    _, test_df = split_train_test(df, train_ratio=0.8)
-
-    # Create environment
-    env = SchwabTradingEnv(test_df, ticker=ticker, initial_cash=25000)
-
-    # Run evaluation
-    obs, _ = env.reset()
-    done = False
-
-    while not done:
-        action, _ = model.predict(obs, deterministic=True)
-        obs, reward, terminated, truncated, info = env.step(action)
-        done = terminated or truncated
-
-    # Show results
-    logger.info(f"Final NAV: ${info.get('nav', 0):,.2f}")
-    # env.render_chart()
-
-
-def hyperparameter_search():
-    """
-    Search for optimal hyperparameters.
-
-    This is a simplified example - use Optuna for more sophisticated searches.
-    """
-    results = []
-
-    learning_rates = [1e-4, 3e-4, 1e-3]
-    batch_sizes = [32, 64, 128]
-
-    for lr in learning_rates:
-        for batch_size in batch_sizes:
-            logger.info(f"\nTesting LR={lr}, Batch={batch_size}")
-
-            # You would create and train a model with these hyperparameters
-            # For brevity, this is left as an exercise
-
-            # results.append({
-            #     'lr': lr,
-            #     'batch_size': batch_size,
-            #     'test_return': test_return
-            # })
-
-    # Find best hyperparameters
-    # best = max(results, key=lambda x: x['test_return'])
-    # logger.info(f"\nBest hyperparameters: LR={best['lr']}, Batch={best['batch_size']}")
+    return model
 
 
 if __name__ == "__main__":
-    # Train new agent
-    model, test_return = train_rl_agent(
-        ticker="AAPL",
-        data_path="../data/AAPL_5min.csv",
-        total_timesteps=100000,
-        save_path="./models/",
-    )
-
-    # Or load existing agent
-    # load_and_evaluate('./models/best_model.zip', ticker='AAPL')
-
-    # Or run hyperparameter search
-    # hyperparameter_search()
+    train_rl_agent()
