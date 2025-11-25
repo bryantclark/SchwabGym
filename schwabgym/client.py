@@ -19,6 +19,7 @@ from schwabgym.order_manager import OrderManager
 from schwabgym.orders import MockResponse
 from schwabgym.physics import ExecutionEngine, RealisticExecutionEngine
 from schwabgym.prices import PriceEngine
+from schwabgym.streamer import MockStreamer
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -36,10 +37,43 @@ class MockClient:
 
     def __init__(
         self,
-        market_data_df,
+        market_data_df=None,
         initial_cash: float = 25000.0,
         execution_engine: Optional[ExecutionEngine] = None,
+        app_key: Optional[str] = None,
+        app_secret: Optional[str] = None,
+        callback_url: Optional[str] = None,
+        token_path: Optional[str] = None,
+        tokens_file: Optional[str] = None,
+        timeout: Optional[int] = None,
+        verbose: bool = False,
+        **kwargs
     ):
+        """
+        Initialize the MockClient.
+        """
+        # If the user is using this as a drop-in replacement for `schwab.client.Client`,
+        # they might not be passing `market_data_df`.
+        # We need `market_data_df`.
+
+        # If market_data_df is a string (app_key passed positionally), warn and require data via kwargs?
+        if isinstance(market_data_df, str):
+            logger.warning("MockClient received string for market_data_df. Assuming it is app_key.")
+            # We can't really function without data.
+            # But maybe they passed `market_data` in kwargs?
+            market_data_df = kwargs.get('market_data', None)
+
+        if market_data_df is None:
+             # Check kwargs for 'market_data'
+             market_data_df = kwargs.get('market_data')
+
+        if market_data_df is None:
+             # Fallback or error?
+             import pandas as pd
+             from schwabgym.data import generate_dummy_data
+             logger.warning("No market data provided. Generating DUMMY data.")
+             market_data_df = generate_dummy_data()
+
         # Initialize components
         self.price_engine = PriceEngine(market_data_df)
         self.account = Account(initial_cash=initial_cash)
@@ -50,11 +84,24 @@ class MockClient:
 
         self.execution_engine = execution_engine
 
+        # Handle latency configuration
+        # Default is to use latency (True) unless specified otherwise.
+        # But for backward compatibility with existing tests which are synchronous,
+        # we might default to False if we detect we are in test mode?
+        # No, explict is better.
+        # Defaulting to True as requested by user.
+        # Tests will fail unless we update them or pass latency_mode=False
+        latency_mode = kwargs.get('latency_mode', True)
+
         self.order_manager = OrderManager(
             account=self.account,
             price_engine=self.price_engine,
-            execution_engine=self.execution_engine
+            execution_engine=self.execution_engine,
+            latency_mode=latency_mode
         )
+
+        # Streamer
+        self.streamer = MockStreamer(self)
 
         logger.info(f"MockClient initialized: ${initial_cash:,.2f} starting capital")
 
@@ -112,7 +159,9 @@ class MockClient:
         # New day check
         if self.current_step > 0:
             curr_date = self._get_current_time().date()
-            prev_date = self.df.index[self.current_step - 1].date()
+            # Handle multi-asset alignment or just use main
+            # In multi-asset, we assumed alignment in PriceEngine.
+            prev_date = self.price_engine.df.index[self.current_step - 1].date()
             if curr_date > prev_date:
                 self.account.on_new_day()
 

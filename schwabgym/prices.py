@@ -19,31 +19,56 @@ class PriceEngine:
     Manages historical market data and simulation time.
 
     Attributes:
-        df (pd.DataFrame): Historical OHLCV data.
+        data (Dict[str, pd.DataFrame]): Historical OHLCV data keyed by symbol.
         current_step (int): Current simulation time index.
         max_steps (int): Total time steps available.
     """
 
-    def __init__(self, market_data_df: pd.DataFrame):
+    def __init__(self, market_data: Union[pd.DataFrame, Dict[str, pd.DataFrame]]):
         """
         Initialize the price engine.
 
         Args:
-            market_data_df (pd.DataFrame): Historical market data.
+            market_data (pd.DataFrame or Dict[str, pd.DataFrame]): Historical market data.
         """
-        # Validate required columns
-        required_cols = {"Open", "High", "Low", "Close", "Volume"}
-        if not required_cols.issubset(market_data_df.columns):
-            missing = required_cols - set(market_data_df.columns)
-            raise ValueError(
-                f"Missing required columns: {missing}\n"
-                f"Required: {required_cols}\n"
-                f"Found: {set(market_data_df.columns)}"
-            )
+        if isinstance(market_data, pd.DataFrame):
+            # Backwards compatibility: Wrap single DF in a default key
+            # We use a default key if none is provided, but ideally client should provide dict
+            self.data = {"DEFAULT": market_data}
+            self.main_symbol = "DEFAULT"
+        elif isinstance(market_data, dict):
+            self.data = market_data
+            # Pick first key as main symbol for time sync
+            self.main_symbol = next(iter(market_data))
+        else:
+            raise TypeError("market_data must be a DataFrame or Dict[str, DataFrame]")
 
-        self.df = market_data_df
         self.current_step = 0
-        self.max_steps = len(self.df) - 1
+
+        # Validate all DFs and find min length
+        lengths = []
+        required_cols = {"Open", "High", "Low", "Close", "Volume"}
+
+        for sym, df in self.data.items():
+            if not required_cols.issubset(df.columns):
+                missing = required_cols - set(df.columns)
+                raise ValueError(
+                    f"Symbol {sym} missing required columns: {missing}\n"
+                    f"Required: {required_cols}"
+                )
+            lengths.append(len(df))
+
+        if not lengths:
+             raise ValueError("No data provided")
+
+        # Use minimum length to ensure we don't go out of bounds on any asset
+        # (Assuming all assets are aligned by time index is safer, but simplest is min len)
+        self.max_steps = min(lengths) - 1
+
+    @property
+    def df(self):
+        """Backwards compatibility for single-asset access."""
+        return self.data[self.main_symbol]
 
     def advance_time(self) -> bool:
         """
@@ -65,22 +90,40 @@ class PriceEngine:
 
     def get_current_time(self) -> datetime.datetime:
         """Get current timestamp."""
-        return self.df.index[self.current_step]
+        # Assume all aligned to main symbol
+        return self.data[self.main_symbol].index[self.current_step]
 
     def get_current_price(self, symbol: str, col: str = "Close") -> float:
         """
         Get current price for a symbol.
-
-        Note: Currently simulator is single-asset based on the DF.
-        The symbol arg is largely ignored in single-asset mode but kept for API shape.
         """
-        # In multi-asset future, look up by symbol.
-        # For now, we assume the DF applies to the symbol being queried.
-        return float(self.df.iloc[self.current_step][col])
+        # If symbol not found, try main symbol or error?
+        # schwab-py would error or return empty.
+        # Here we try to find the symbol, if not fall back to main (for single asset mode)
+        # or raise error if in strict multi-asset mode.
 
-    def get_current_ohlcv(self) -> Dict[str, Union[float, int]]:
+        target_df = self.data.get(symbol)
+        if target_df is None:
+             # Fallback for single-asset mode where users might query any symbol against the loaded DF
+             if len(self.data) == 1:
+                 target_df = self.data[self.main_symbol]
+             else:
+                 # Should we return 0 or error? Real API would verify symbol.
+                 # For safety in sim, maybe log warning and return 0?
+                 # Or just return main symbol price?
+                 # Let's assume if it's not in our universe, we can't price it.
+                 # But to prevent crashing bots that query indices etc:
+                 logger.warning(f"Symbol {symbol} not in market data. Using {self.main_symbol}.")
+                 target_df = self.data[self.main_symbol]
+
+        return float(target_df.iloc[self.current_step][col])
+
+    def get_current_ohlcv(self, symbol: Optional[str] = None) -> Dict[str, Union[float, int]]:
         """Get current step's full OHLCV data."""
-        row = self.df.iloc[self.current_step]
+        sym = symbol or self.main_symbol
+        target_df = self.data.get(sym, self.data[self.main_symbol])
+
+        row = target_df.iloc[self.current_step]
         return {
             "Open": float(row["Open"]),
             "High": float(row["High"]),
@@ -103,18 +146,35 @@ class PriceEngine:
         response_body = {}
         ts_ms = int(self.get_current_time().timestamp() * 1000)
 
-        row = self.df.iloc[self.current_step]
-        price = float(row["Close"])
-        volume = int(row["Volume"])
-        volatility = float(row.get("Volatility", 0.01))
-
-        # Dynamic spread
-        spread_factor = 0.0005 * (1 + (volatility * 100))
-        bid_price = price * (1 - spread_factor)
-        ask_price = price * (1 + spread_factor)
-
         for sym in symbols:
-            # For now, all symbols get the same price from the single DF
+            # Locate correct DF
+            df = self.data.get(sym)
+            if df is None:
+                if len(self.data) == 1:
+                    df = self.data[self.main_symbol]
+                else:
+                    # Skip unknown symbols
+                    continue
+
+            row = df.iloc[self.current_step]
+            price = float(row["Close"])
+            volume = int(row["Volume"])
+
+            # Use pre-calculated columns if available (from data.py enhancements)
+            if "BidPrice" in df.columns and "AskPrice" in df.columns:
+                bid_price = float(row["BidPrice"])
+                ask_price = float(row["AskPrice"])
+            else:
+                # Fallback calculation
+                volatility = float(row.get("Volatility", 0.01))
+                spread_factor = 0.0005 * (1 + (volatility * 100))
+                bid_price = price * (1 - spread_factor)
+                ask_price = price * (1 + spread_factor)
+
+            bid_size = int(row.get("BidSize", 100))
+            ask_size = int(row.get("AskSize", 100))
+            last_size = int(row.get("LastSize", 100))
+
             response_body[sym] = {
                 "quote": {
                     "symbol": sym,
@@ -122,8 +182,12 @@ class PriceEngine:
                     "closePrice": price,
                     "bidPrice": bid_price,
                     "askPrice": ask_price,
+                    "bidSize": bid_size,
+                    "askSize": ask_size,
+                    "lastSize": last_size,
                     "totalVolume": volume,
                     "tradeTime": ts_ms,
+                    "quoteTime": ts_ms,
                 }
             }
         return response_body
@@ -139,11 +203,18 @@ class PriceEngine:
             List[Dict]: List of candle dicts.
         """
         LOOKBACK = 50
+
+        target_df = self.data.get(symbol)
+        if target_df is None:
+             if len(self.data) == 1:
+                 target_df = self.data[self.main_symbol]
+             else:
+                 return []
+
         start_idx = max(0, self.current_step - LOOKBACK + 1)
+        col_close = "AdjClose" if "AdjClose" in target_df.columns else "Close"
 
-        col_close = "AdjClose" if "AdjClose" in self.df.columns else "Close"
-
-        subset = self.df.iloc[start_idx : self.current_step + 1]
+        subset = target_df.iloc[start_idx : self.current_step + 1]
         candles = []
 
         for ts, row in subset.iterrows():

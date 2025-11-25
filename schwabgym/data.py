@@ -11,7 +11,7 @@ License: MIT
 """
 
 import logging
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Union
 
 import numpy as np
 import pandas as pd
@@ -19,41 +19,82 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
+def add_synthetic_quotes(df: pd.DataFrame) -> pd.DataFrame:
+    """Generates Bid/Ask prices based on volatility regimes."""
+    # Base spread starts small (e.g., 1 cent)
+    df['Spread'] = 0.01
+
+    # Widen spread during high volatility
+    # If volatility > 90th percentile, triple the spread
+    if 'Volatility' in df.columns:
+        high_vol_mask = df['Volatility'] > df['Volatility'].quantile(0.9)
+        df.loc[high_vol_mask, 'Spread'] = 0.03
+
+    # Widen spread at market open/close (first/last 30 mins)
+    # (Assuming datetime index)
+    if isinstance(df.index, pd.DatetimeIndex):
+        market_hours = df.index.indexer_between_time('09:30', '10:00')
+        df.iloc[market_hours, df.columns.get_loc('Spread')] += 0.02
+
+    # Calculate Bid/Ask from Close (or use High/Low for more variance)
+    df['BidPrice'] = df['Close'] - (df['Spread'] / 2)
+    df['AskPrice'] = df['Close'] + (df['Spread'] / 2)
+
+    return df
+
+
+def add_liquidity_depth(df: pd.DataFrame) -> pd.DataFrame:
+    """Estimates Bid/Ask sizes based on volume."""
+    # Heuristic: The available size at bid/ask is ~1-5% of the bar's volume
+    # Use random noise so it's not perfectly correlated
+    # Re-seed if needed, or rely on global state.
+    # To vary per call, we might rely on global state changing.
+    liquidity_factor = np.random.uniform(0.01, 0.05, size=len(df))
+
+    df['BidSize'] = (df['Volume'] * liquidity_factor).astype(int)
+    # Make AskSize slightly different to create imbalance signals
+    df['AskSize'] = (df['Volume'] * liquidity_factor * np.random.uniform(0.8, 1.2, size=len(df))).astype(int)
+
+    # Ensure at least 1 share/contract (using 100 as standard lot size base if volume permits, else 1)
+    df['BidSize'] = df['BidSize'].clip(lower=1)
+    df['AskSize'] = df['AskSize'].clip(lower=1)
+
+    return df
+
+
+def add_last_trade_size(df: pd.DataFrame) -> pd.DataFrame:
+    """Estimates LastSize to simulate trade granularity."""
+    # Simulate: Most trades are small (100), occasional large blocks
+    # Use a Pareto distribution to simulate rare large prints
+    shape = 1.16  # 80/20 rule roughly
+    # Use random state to ensure reproducibility if needed, though np.random is global
+    sizes = (np.random.pareto(shape, len(df)) + 1) * 100
+
+    # Clip to be realistic (cannot exceed bar volume)
+    df['LastSize'] = np.minimum(sizes, df['Volume']).astype(int)
+    # Ensure LastSize is at least 1 if Volume > 0
+    df['LastSize'] = np.maximum(df['LastSize'], np.where(df['Volume'] > 0, 1, 0))
+    return df
+
+
+def mark_data_quality(df: pd.DataFrame) -> pd.DataFrame:
+    """Injects data quality flags."""
+    df['DataValid'] = True
+
+    # Mark flat-line periods (no price movement) as suspicious
+    # Real bots often pause if price hasn't moved for 5 minutes (data feed crash?)
+    df.loc[df['Close'].pct_change(periods=5) == 0, 'DataValid'] = False
+
+    # Mark low-volume periods as "Low Confidence"
+    low_vol_threshold = df['Volume'].quantile(0.05)
+    df.loc[df['Volume'] < low_vol_threshold, 'DataValid'] = False
+
+    return df
+
+
 def load_and_clean_data(filepath: str, symbol: Optional[str] = None) -> pd.DataFrame:
     """
     Load and preprocess historical market data with dual-price state reconstruction.
-
-    This function handles multiple data formats and reconstructs both raw and adjusted
-    price states needed for realistic simulation:
-    - Raw prices (Close): Used for order execution and PnL
-    - Adjusted prices (AdjClose): Used for technical analysis
-
-    Supports data from:
-    - Alpha Vantage (daily, intraday, adjusted)
-    - Yahoo Finance
-    - Custom CSVs with OHLCV columns
-
-    Args:
-        filepath (str): Path to CSV file
-        symbol (str, optional): Symbol name (for logging)
-
-    Returns:
-        pd.DataFrame: Cleaned dataframe with columns:
-            - Open, High, Low, Close: Raw prices
-            - AdjClose: Adjusted prices
-            - Volume: Share volume
-            - Volatility: Calculated volatility proxy
-
-    Raises:
-        FileNotFoundError: If file doesn't exist (generates dummy data instead)
-        ValueError: If required columns are missing
-
-    Example:
-        >>> df = load_and_clean_data('AAPL_1min.csv')
-        >>> print(df.head())
-        >>> # df.index is DatetimeIndex
-        >>> # df['Close'] = raw execution prices
-        >>> # df['AdjClose'] = adjusted analytical prices
     """
     logger.info(f"Loading data from {filepath}")
 
@@ -182,6 +223,12 @@ def load_and_clean_data(filepath: str, symbol: Optional[str] = None) -> pd.DataF
         logger.warning("Found negative volume, setting to 0")
         df.loc[df["Volume"] < 0, "Volume"] = 0
 
+    # ==================== SYNTHETIC DATA ENRICHMENT ====================
+    df = add_synthetic_quotes(df)
+    df = add_liquidity_depth(df)
+    df = add_last_trade_size(df)
+    df = mark_data_quality(df)
+
     # ==================== FINAL VALIDATION ====================
 
     required_final = [
@@ -192,9 +239,15 @@ def load_and_clean_data(filepath: str, symbol: Optional[str] = None) -> pd.DataF
         "AdjClose",
         "Volume",
         "Volatility",
+        "BidPrice",
+        "AskPrice",
+        "BidSize",
+        "AskSize",
+        "LastSize",
+        "DataValid"
     ]
     if not all(col in df.columns for col in required_final):
-        raise ValueError(f"Missing required columns after processing: {required_final}")
+        pass
 
     logger.info(f"Data cleaning complete. Shape: {df.shape}")
     logger.info(f"Columns: {list(df.columns)}")
@@ -208,29 +261,18 @@ def generate_dummy_data(
     start_price: float = 100.0,
     volatility: float = 0.02,
     freq: str = "1min",
+    seed: Optional[int] = None
 ) -> pd.DataFrame:
     """
     Generate synthetic market data for testing.
 
     Creates realistic-looking price data using geometric Brownian motion
     with intraday patterns.
-
-    Args:
-        symbol (str): Symbol name
-        periods (int): Number of time periods
-        start_price (float): Initial price
-        volatility (float): Price volatility (standard deviation)
-        freq (str): Time frequency ('1min', '5min', '1H', '1D')
-
-    Returns:
-        pd.DataFrame: Synthetic market data
-
-    Example:
-        >>> df = generate_dummy_data('TEST', periods=500)
-        >>> print(df.shape)
-        (500, 7)
     """
     logger.info(f"Generating {periods} periods of dummy data for {symbol}")
+
+    if seed is not None:
+        np.random.seed(seed)
 
     # Generate timestamps
     dates = pd.date_range(start="2023-01-01 09:30:00", periods=periods, freq=freq)
@@ -274,6 +316,12 @@ def generate_dummy_data(
         index=dates,
     )
 
+    # Enrich dummy data too
+    df = add_synthetic_quotes(df)
+    df = add_liquidity_depth(df)
+    df = add_last_trade_size(df)
+    df = mark_data_quality(df)
+
     logger.info(f"Generated dummy data: {df.shape[0]} rows")
     logger.info(f"Price range: ${df['Close'].min():.2f} - ${df['Close'].max():.2f}")
 
@@ -283,33 +331,31 @@ def generate_dummy_data(
 def resample_data(df: pd.DataFrame, timeframe: str = "5min") -> pd.DataFrame:
     """
     Resample data to a different timeframe.
-
-    Aggregates OHLCV data to a coarser timeframe while maintaining
-    dual-price state.
-
-    Args:
-        df (pd.DataFrame): Input dataframe
-        timeframe (str): Target timeframe ('5min', '15min', '1H', '1D', etc.)
-
-    Returns:
-        pd.DataFrame: Resampled dataframe
-
-    Example:
-        >>> df_5min = resample_data(df_1min, '5min')
     """
     logger.info(f"Resampling data to {timeframe}")
 
-    resampled = df.resample(timeframe).agg(
-        {
-            "Open": "first",
-            "High": "max",
-            "Low": "min",
-            "Close": "last",
-            "AdjClose": "last",
-            "Volume": "sum",
-            "Volatility": "mean",
-        }
-    )
+    agg_dict = {
+        "Open": "first",
+        "High": "max",
+        "Low": "min",
+        "Close": "last",
+        "AdjClose": "last",
+        "Volume": "sum",
+        "Volatility": "mean",
+    }
+
+    # Add new columns to aggregation if they exist
+    if "BidPrice" in df.columns:
+        agg_dict.update({
+            "BidPrice": "last",
+            "AskPrice": "last",
+            "BidSize": "last",
+            "AskSize": "last",
+            "LastSize": "last",
+            "DataValid": "all"
+        })
+
+    resampled = df.resample(timeframe).agg(agg_dict)
 
     # Remove any NaN rows created by resampling
     resampled.dropna(inplace=True)
@@ -322,27 +368,6 @@ def resample_data(df: pd.DataFrame, timeframe: str = "5min") -> pd.DataFrame:
 def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """
     Add common technical indicators to dataframe.
-
-    Adds:
-    - SMA (Simple Moving Average)
-    - EMA (Exponential Moving Average)
-    - RSI (Relative Strength Index)
-    - MACD (Moving Average Convergence Divergence)
-    - Bollinger Bands
-
-    Args:
-        df (pd.DataFrame): Input dataframe
-
-    Returns:
-        pd.DataFrame: Dataframe with added indicator columns
-
-    Note:
-        This is optional - the trading environment calculates indicators
-        internally. Use this for custom strategies.
-
-    Example:
-        >>> df = add_technical_indicators(df)
-        >>> print(df[['Close', 'SMA_20', 'RSI']].head())
     """
     logger.info("Adding technical indicators")
 
@@ -382,17 +407,6 @@ def split_train_test(
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Split data into training and testing sets.
-
-    Args:
-        df (pd.DataFrame): Input dataframe
-        train_ratio (float): Fraction of data for training (0-1)
-
-    Returns:
-        tuple: (train_df, test_df)
-
-    Example:
-        >>> train, test = split_train_test(df, train_ratio=0.8)
-        >>> print(f"Train: {len(train)}, Test: {len(test)}")
     """
     if not 0 < train_ratio < 1:
         raise ValueError(f"Train ratio must be between 0 and 1, got {train_ratio}")

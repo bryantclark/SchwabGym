@@ -38,10 +38,11 @@ def client(sample_data):
     Create a MockClient instance with sample data.
 
     Uses realistic physics engine (default).
+    Legacy tests assume 0 latency, so we force latency_mode=False.
     """
     from schwabgym import MockClient
 
-    return MockClient(sample_data, initial_cash=10000.0)
+    return MockClient(sample_data, initial_cash=10000.0, latency_mode=False)
 
 
 @pytest.fixture
@@ -61,7 +62,8 @@ def fast_client(sample_data):
     from schwabgym.physics import FastExecutionEngine
 
     engine = FastExecutionEngine()
-    return MockClient(sample_data, initial_cash=10000.0, execution_engine=engine)
+    # Also disable latency for fast client tests
+    return MockClient(sample_data, initial_cash=10000.0, execution_engine=engine, latency_mode=False)
 
 
 @pytest.fixture
