@@ -19,6 +19,7 @@ from schwabgym.order_manager import OrderManager
 from schwabgym.orders import MockResponse
 from schwabgym.physics import ExecutionEngine, RealisticExecutionEngine
 from schwabgym.prices import PriceEngine
+from schwabgym.streamer import MockStreamer
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -36,10 +37,40 @@ class MockClient:
 
     def __init__(
         self,
-        market_data_df,
+        market_data_df=None,
         initial_cash: float = 25000.0,
         execution_engine: Optional[ExecutionEngine] = None,
+        app_key: Optional[str] = None,
+        app_secret: Optional[str] = None,
+        callback_url: Optional[str] = None,
+        token_path: Optional[str] = None,
+        tokens_file: Optional[str] = None,
+        timeout: Optional[int] = None,
+        verbose: bool = False,
+        **kwargs,
     ):
+        """
+        Initialize the MockClient.
+        """
+        # Handle case where app_key is passed positionally as the first argument
+        if isinstance(market_data_df, str):
+            logger.warning(
+                "MockClient received string for market_data_df. Assuming it is app_key."
+            )
+            market_data_df = kwargs.get("market_data", None)
+
+        if market_data_df is None:
+            # Check kwargs for 'market_data'
+            market_data_df = kwargs.get("market_data")
+
+        if market_data_df is None:
+            import pandas as pd
+
+            from schwabgym.data import generate_dummy_data
+
+            logger.warning("No market data provided. Generating DUMMY data.")
+            market_data_df = generate_dummy_data()
+
         # Initialize components
         self.price_engine = PriceEngine(market_data_df)
         self.account = Account(initial_cash=initial_cash)
@@ -50,11 +81,19 @@ class MockClient:
 
         self.execution_engine = execution_engine
 
+        # Default to latency mode unless explicitly disabled
+        latency_mode = kwargs.get("latency_mode", True)
+        latency_mode = kwargs.get("latency_mode", True)
+
         self.order_manager = OrderManager(
             account=self.account,
             price_engine=self.price_engine,
-            execution_engine=self.execution_engine
+            execution_engine=self.execution_engine,
+            latency_mode=latency_mode,
         )
+
+        # Streamer
+        self.streamer = MockStreamer(self)
 
         logger.info(f"MockClient initialized: ${initial_cash:,.2f} starting capital")
 
@@ -109,10 +148,10 @@ class MockClient:
 
         self.order_manager.process_working_orders()
 
-        # New day check
+        # Check for new day to reset day trading counters
         if self.current_step > 0:
             curr_date = self._get_current_time().date()
-            prev_date = self.df.index[self.current_step - 1].date()
+            prev_date = self.price_engine.df.index[self.current_step - 1].date()
             if curr_date > prev_date:
                 self.account.on_new_day()
 
@@ -159,7 +198,9 @@ class MockClient:
         # Calculate current values
         equity = self._calculate_equity()
         buying_power = self._calculate_buying_power(equity)
-        long_mv, short_mv = self.account.calculate_market_value(self.price_engine.get_current_price)
+        long_mv, short_mv = self.account.calculate_market_value(
+            self.price_engine.get_current_price
+        )
 
         # Build positions array
         position_list = []
@@ -226,13 +267,9 @@ class MockClient:
         if account_hash != self.account_hash:
             return MockResponse({"error": "Unauthorized"}, 401)
 
-        # PDT Check happens in Account.execute_trade, but checking here for flagging?
-        # The logic was moved to Account.check_pdt_rule which is called during execution.
-        # However, schwab-py might reject upfront.
-        # But for now, we rely on OrderManager handling it.
-        # If user is ALREADY flagged, we should reject.
+        # Check for Pattern Day Trader restriction
         if self.account._is_pdt_flagged:
-             return MockResponse(
+            return MockResponse(
                 {"error": "Order Rejected: Pattern Day Trader Restriction"}, 403
             )
 

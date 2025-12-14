@@ -331,7 +331,6 @@ try:
     from schwab.orders import equities, options
 
     # If schwab-py is installed, prefer it (for live trading)
-    # But keep mocks available for testing
     pass
 except ImportError:
     # schwab-py not installed, use mocks
