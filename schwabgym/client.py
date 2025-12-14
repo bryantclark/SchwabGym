@@ -47,32 +47,29 @@ class MockClient:
         tokens_file: Optional[str] = None,
         timeout: Optional[int] = None,
         verbose: bool = False,
-        **kwargs
+        **kwargs,
     ):
         """
         Initialize the MockClient.
         """
-        # If the user is using this as a drop-in replacement for `schwab.client.Client`,
-        # they might not be passing `market_data_df`.
-        # We need `market_data_df`.
-
-        # If market_data_df is a string (app_key passed positionally), warn and require data via kwargs?
+        # Handle case where app_key is passed positionally as the first argument
         if isinstance(market_data_df, str):
-            logger.warning("MockClient received string for market_data_df. Assuming it is app_key.")
-            # We can't really function without data.
-            # But maybe they passed `market_data` in kwargs?
-            market_data_df = kwargs.get('market_data', None)
+            logger.warning(
+                "MockClient received string for market_data_df. Assuming it is app_key."
+            )
+            market_data_df = kwargs.get("market_data", None)
 
         if market_data_df is None:
-             # Check kwargs for 'market_data'
-             market_data_df = kwargs.get('market_data')
+            # Check kwargs for 'market_data'
+            market_data_df = kwargs.get("market_data")
 
         if market_data_df is None:
-             # Fallback or error?
-             import pandas as pd
-             from schwabgym.data import generate_dummy_data
-             logger.warning("No market data provided. Generating DUMMY data.")
-             market_data_df = generate_dummy_data()
+            import pandas as pd
+
+            from schwabgym.data import generate_dummy_data
+
+            logger.warning("No market data provided. Generating DUMMY data.")
+            market_data_df = generate_dummy_data()
 
         # Initialize components
         self.price_engine = PriceEngine(market_data_df)
@@ -84,20 +81,15 @@ class MockClient:
 
         self.execution_engine = execution_engine
 
-        # Handle latency configuration
-        # Default is to use latency (True) unless specified otherwise.
-        # But for backward compatibility with existing tests which are synchronous,
-        # we might default to False if we detect we are in test mode?
-        # No, explict is better.
-        # Defaulting to True as requested by user.
-        # Tests will fail unless we update them or pass latency_mode=False
-        latency_mode = kwargs.get('latency_mode', True)
+        # Default to latency mode unless explicitly disabled
+        latency_mode = kwargs.get("latency_mode", True)
+        latency_mode = kwargs.get("latency_mode", True)
 
         self.order_manager = OrderManager(
             account=self.account,
             price_engine=self.price_engine,
             execution_engine=self.execution_engine,
-            latency_mode=latency_mode
+            latency_mode=latency_mode,
         )
 
         # Streamer
@@ -156,11 +148,9 @@ class MockClient:
 
         self.order_manager.process_working_orders()
 
-        # New day check
+        # Check for new day to reset day trading counters
         if self.current_step > 0:
             curr_date = self._get_current_time().date()
-            # Handle multi-asset alignment or just use main
-            # In multi-asset, we assumed alignment in PriceEngine.
             prev_date = self.price_engine.df.index[self.current_step - 1].date()
             if curr_date > prev_date:
                 self.account.on_new_day()
@@ -208,7 +198,9 @@ class MockClient:
         # Calculate current values
         equity = self._calculate_equity()
         buying_power = self._calculate_buying_power(equity)
-        long_mv, short_mv = self.account.calculate_market_value(self.price_engine.get_current_price)
+        long_mv, short_mv = self.account.calculate_market_value(
+            self.price_engine.get_current_price
+        )
 
         # Build positions array
         position_list = []
@@ -275,13 +267,9 @@ class MockClient:
         if account_hash != self.account_hash:
             return MockResponse({"error": "Unauthorized"}, 401)
 
-        # PDT Check happens in Account.execute_trade, but checking here for flagging?
-        # The logic was moved to Account.check_pdt_rule which is called during execution.
-        # However, schwab-py might reject upfront.
-        # But for now, we rely on OrderManager handling it.
-        # If user is ALREADY flagged, we should reject.
+        # Check for Pattern Day Trader restriction
         if self.account._is_pdt_flagged:
-             return MockResponse(
+            return MockResponse(
                 {"error": "Order Rejected: Pattern Day Trader Restriction"}, 403
             )
 

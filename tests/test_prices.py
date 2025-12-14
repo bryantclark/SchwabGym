@@ -3,13 +3,17 @@ Tests for Price Engine
 ======================
 """
 
+from datetime import datetime
+
 import pandas as pd
 import pytest
-from datetime import datetime
+
 from schwabgym.prices import PriceEngine
+
 
 @pytest.fixture
 def sample_data():
+    """Local fixture with predictable data for price engine tests."""
     dates = pd.date_range(start="2023-01-01", periods=10, freq="1min")
     data = {
         "Open": [100.0] * 10,
@@ -17,9 +21,10 @@ def sample_data():
         "Low": [99.0] * 10,
         "Close": [100.0] * 10,
         "Volume": [1000] * 10,
-        "Volatility": [0.01] * 10
+        "Volatility": [0.01] * 10,
     }
     return pd.DataFrame(data, index=dates)
+
 
 class TestPriceEngine:
     def test_initialization(self, sample_data):
@@ -72,7 +77,85 @@ class TestPriceEngine:
 
     def test_get_price_history(self, sample_data):
         engine = PriceEngine(sample_data)
-        engine.advance_time() # step 1
+        engine.advance_time()  # step 1
         history = engine.get_price_history_data("AAPL")
-        assert len(history) == 2 # step 0 and 1
+        assert len(history) == 2  # step 0 and 1
         assert history[0]["open"] == 100.0
+
+
+@pytest.fixture
+def price_engine_setup():
+    df = pd.DataFrame(
+        {
+            "Open": [100.0],
+            "High": [105.0],
+            "Low": [95.0],
+            "Close": [101.0],
+            "Volume": [1000],
+        },
+        index=pd.to_datetime(["2023-01-01"]),
+    )
+    return PriceEngine(df)
+
+
+def test_get_price_unknown_symbol_fallback(price_engine_setup):
+    engine = price_engine_setup
+    # Single asset mode fallback
+    price = engine.get_current_price("UNKNOWN_SYMBOL")
+    assert price == 101.0
+
+
+def test_get_quotes_mixed_symbols(price_engine_setup):
+    engine = price_engine_setup
+
+    quotes = engine.get_quotes_data(["DEFAULT", "UNKNOWN"])
+
+    # DEFAULT should be there
+    assert "DEFAULT" in quotes
+    assert quotes["DEFAULT"]["quote"]["lastPrice"] == 101.0
+
+    # UNKNOWN should be there because of fallback in single-asset mode
+    assert "UNKNOWN" in quotes
+    assert quotes["UNKNOWN"]["quote"]["lastPrice"] == 101.0
+
+
+def test_multi_asset_behavior():
+    df1 = pd.DataFrame(
+        {"Open": [10], "High": [11], "Low": [9], "Close": [10], "Volume": [100]},
+        index=pd.to_datetime(["2023-01-01"]),
+    )
+
+    df2 = pd.DataFrame(
+        {"Open": [20], "High": [21], "Low": [19], "Close": [20], "Volume": [200]},
+        index=pd.to_datetime(["2023-01-01"]),
+    )
+
+    data = {"SYM1": df1, "SYM2": df2}
+    engine = PriceEngine(data)
+
+    # Test known symbols
+    assert engine.get_current_price("SYM1") == 10.0
+    assert engine.get_current_price("SYM2") == 20.0
+
+    # Test unknown symbol (should warn and use main symbol, which is SYM1 or SYM2 depending on dict order)
+    # In the code:
+    # if len(self.data) == 1: fallback
+    # else: warning and use main_symbol
+
+    # Let's verify which is main
+    main_sym = engine.main_symbol
+    expected_price = 10.0 if main_sym == "SYM1" else 20.0
+
+    price = engine.get_current_price("UNKNOWN")
+    assert price == expected_price
+
+
+def test_price_history_empty(price_engine_setup):
+    engine = price_engine_setup
+    # Request history for unknown symbol in multi-asset mode (simulated by mocking data len > 1?)
+    # Or just test the logic directly if we can.
+
+    # Actually, let's test the single asset fallback for history
+    history = engine.get_price_history_data("UNKNOWN")
+    assert len(history) == 1
+    assert history[0]["close"] == 101.0

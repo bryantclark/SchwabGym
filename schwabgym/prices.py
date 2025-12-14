@@ -33,7 +33,6 @@ class PriceEngine:
         """
         if isinstance(market_data, pd.DataFrame):
             # Backwards compatibility: Wrap single DF in a default key
-            # We use a default key if none is provided, but ideally client should provide dict
             self.data = {"DEFAULT": market_data}
             self.main_symbol = "DEFAULT"
         elif isinstance(market_data, dict):
@@ -59,10 +58,9 @@ class PriceEngine:
             lengths.append(len(df))
 
         if not lengths:
-             raise ValueError("No data provided")
+            raise ValueError("No data provided")
 
         # Use minimum length to ensure we don't go out of bounds on any asset
-        # (Assuming all assets are aligned by time index is safer, but simplest is min len)
         self.max_steps = min(lengths) - 1
 
     @property
@@ -104,21 +102,20 @@ class PriceEngine:
 
         target_df = self.data.get(symbol)
         if target_df is None:
-             # Fallback for single-asset mode where users might query any symbol against the loaded DF
-             if len(self.data) == 1:
-                 target_df = self.data[self.main_symbol]
-             else:
-                 # Should we return 0 or error? Real API would verify symbol.
-                 # For safety in sim, maybe log warning and return 0?
-                 # Or just return main symbol price?
-                 # Let's assume if it's not in our universe, we can't price it.
-                 # But to prevent crashing bots that query indices etc:
-                 logger.warning(f"Symbol {symbol} not in market data. Using {self.main_symbol}.")
-                 target_df = self.data[self.main_symbol]
+            # Fallback for single-asset mode
+            if len(self.data) == 1:
+                target_df = self.data[self.main_symbol]
+            else:
+                logger.warning(
+                    f"Symbol {symbol} not in market data. Using {self.main_symbol}."
+                )
+                target_df = self.data[self.main_symbol]
 
         return float(target_df.iloc[self.current_step][col])
 
-    def get_current_ohlcv(self, symbol: Optional[str] = None) -> Dict[str, Union[float, int]]:
+    def get_current_ohlcv(
+        self, symbol: Optional[str] = None
+    ) -> Dict[str, Union[float, int]]:
         """Get current step's full OHLCV data."""
         sym = symbol or self.main_symbol
         target_df = self.data.get(sym, self.data[self.main_symbol])
@@ -206,10 +203,10 @@ class PriceEngine:
 
         target_df = self.data.get(symbol)
         if target_df is None:
-             if len(self.data) == 1:
-                 target_df = self.data[self.main_symbol]
-             else:
-                 return []
+            if len(self.data) == 1:
+                target_df = self.data[self.main_symbol]
+            else:
+                return []
 
         start_idx = max(0, self.current_step - LOOKBACK + 1)
         col_close = "AdjClose" if "AdjClose" in target_df.columns else "Close"

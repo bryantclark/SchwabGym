@@ -3,9 +3,12 @@ Tests for Order Management (Client-Level)
 =========================================
 """
 
-import pytest
 import datetime
+
+import pytest
+
 from schwabgym.orders import MockEquities as eq
+
 
 class TestOrderManagement:
     def test_place_market_order_updates_status(self, client):
@@ -22,7 +25,7 @@ class TestOrderManagement:
     def test_place_limit_order_updates_status(self, client):
         """Test that limit orders stay WORKING."""
         current_price = client.get_quotes("TEST").json()["TEST"]["quote"]["lastPrice"]
-        limit_price = current_price * 0.9 # Well below market
+        limit_price = current_price * 0.9  # Well below market
 
         order = eq.equity_buy_limit("TEST", 10, limit_price)
         client.place_order(client.account_hash, order)
@@ -33,7 +36,9 @@ class TestOrderManagement:
     def test_cancel_working_order(self, client):
         """Test cancelling a working order."""
         current_price = client.get_quotes("TEST").json()["TEST"]["quote"]["lastPrice"]
-        client.place_order(client.account_hash, eq.equity_buy_limit("TEST", 10, current_price * 0.5))
+        client.place_order(
+            client.account_hash, eq.equity_buy_limit("TEST", 10, current_price * 0.5)
+        )
         order_id = list(client.orders.keys())[0]
 
         resp = client.cancel_order(client.account_hash, order_id)
@@ -53,7 +58,9 @@ class TestOrderManagement:
     def test_replace_order(self, client):
         """Test replacing an order."""
         current_price = client.get_quotes("TEST").json()["TEST"]["quote"]["lastPrice"]
-        client.place_order(client.account_hash, eq.equity_buy_limit("TEST", 10, current_price * 0.5))
+        client.place_order(
+            client.account_hash, eq.equity_buy_limit("TEST", 10, current_price * 0.5)
+        )
         order_id = list(client.orders.keys())[0]
 
         new_order = eq.equity_buy_limit("TEST", 20, current_price * 0.6)
@@ -72,10 +79,14 @@ class TestOrderManagement:
     def test_get_orders(self, client):
         """Test get_orders_for_account."""
         # Place a few orders
-        client.place_order(client.account_hash, eq.equity_buy_market("TEST", 10)) # Filled
+        client.place_order(
+            client.account_hash, eq.equity_buy_market("TEST", 10)
+        )  # Filled
 
         current_price = client.get_quotes("TEST").json()["TEST"]["quote"]["lastPrice"]
-        client.place_order(client.account_hash, eq.equity_buy_limit("TEST", 5, current_price * 0.5)) # Working
+        client.place_order(
+            client.account_hash, eq.equity_buy_limit("TEST", 5, current_price * 0.5)
+        )  # Working
 
         resp = client.get_orders_for_account(client.account_hash)
         assert resp.status_code == 200

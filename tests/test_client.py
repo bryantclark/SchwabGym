@@ -7,9 +7,8 @@ Unit tests for the MockClient simulator.
 Author: Bryant Clark
 """
 
-from datetime import datetime, timedelta
+from unittest.mock import MagicMock, patch
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -206,14 +205,6 @@ class TestMockClient:
         assert resp.status_code == 400
         assert "Unsupported order type" in resp.json()["error"]
 
-    def test_unauthorized_access(self, client):
-        """Test unauthorized access."""
-        resp = client.get_account("WRONG_HASH")
-        assert resp.status_code == 401
-
-        resp = client.place_order("WRONG_HASH", {})
-        assert resp.status_code == 401
-
     def test_pdt_rule_flagging(self, client):
         """Test Pattern Day Trader flagging."""
         # Force account value below $25k (client fixture starts with 10k)
@@ -259,3 +250,79 @@ class TestMockClient:
         assert client.current_step == 0
         assert len(client.positions) == 0
         assert len(client.working_orders) == 0
+
+
+@pytest.fixture
+def valid_df():
+    return pd.DataFrame(
+        {
+            "Open": [100.0],
+            "High": [105.0],
+            "Low": [95.0],
+            "Close": [100.0],
+            "Volume": [1000],
+        },
+        index=pd.to_datetime(["2023-01-01"]),
+    )
+
+
+def test_client_init_string_arg(valid_df):
+    # Test passing string as first arg (app_key)
+    # And providing market_data in kwargs
+
+    with patch("schwabgym.client.logger") as mock_logger:
+        client = MockClient("my_app_key", market_data=valid_df)
+
+        mock_logger.warning.assert_called_with(
+            "MockClient received string for market_data_df. Assuming it is app_key."
+        )
+        assert client.price_engine is not None
+
+
+def test_client_init_no_data_fallback(valid_df):
+    # Test fallback to dummy data
+    # We patch schwabgym.data.generate_dummy_data because that is what is imported
+    with patch("schwabgym.data.generate_dummy_data") as mock_gen:
+        mock_gen.return_value = valid_df
+
+        client = MockClient()
+        assert mock_gen.called
+
+
+def test_advance_time_end(valid_df):
+    client = MockClient(valid_df)
+
+    # Force price engine to end
+    client.price_engine.advance_time = MagicMock(return_value=False)
+
+    assert client.advance_time() is False
+
+
+def test_unauthorized_access(valid_df):
+    client = MockClient(valid_df)
+
+    wrong_hash = "WRONG_HASH"
+
+    # get_account
+    resp = client.get_account(wrong_hash)
+    assert resp.status_code == 401
+
+    # place_order
+    resp = client.place_order(wrong_hash, {})
+    assert resp.status_code == 401
+
+    # cancel_order
+    resp = client.cancel_order(wrong_hash, 123)
+    assert resp.status_code == 401
+
+    # replace_order
+    resp = client.replace_order(wrong_hash, 123, {})
+    assert resp.status_code == 401
+
+    # get_order
+    resp = client.get_order(wrong_hash, 123)
+    assert resp.status_code == 401
+
+    # get_orders_for_account
+    resp = client.get_orders_for_account(wrong_hash)
+    assert resp.status_code == 401

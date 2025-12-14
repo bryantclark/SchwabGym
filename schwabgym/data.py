@@ -11,7 +11,7 @@ License: MIT
 """
 
 import logging
-from typing import Optional, Tuple, Dict, Union
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -22,23 +22,23 @@ logger = logging.getLogger(__name__)
 def add_synthetic_quotes(df: pd.DataFrame) -> pd.DataFrame:
     """Generates Bid/Ask prices based on volatility regimes."""
     # Base spread starts small (e.g., 1 cent)
-    df['Spread'] = 0.01
+    df["Spread"] = 0.01
 
     # Widen spread during high volatility
     # If volatility > 90th percentile, triple the spread
-    if 'Volatility' in df.columns:
-        high_vol_mask = df['Volatility'] > df['Volatility'].quantile(0.9)
-        df.loc[high_vol_mask, 'Spread'] = 0.03
+    if "Volatility" in df.columns:
+        high_vol_mask = df["Volatility"] > df["Volatility"].quantile(0.9)
+        df.loc[high_vol_mask, "Spread"] = 0.03
 
     # Widen spread at market open/close (first/last 30 mins)
     # (Assuming datetime index)
     if isinstance(df.index, pd.DatetimeIndex):
-        market_hours = df.index.indexer_between_time('09:30', '10:00')
-        df.iloc[market_hours, df.columns.get_loc('Spread')] += 0.02
+        market_hours = df.index.indexer_between_time("09:30", "10:00")
+        df.iloc[market_hours, df.columns.get_loc("Spread")] += 0.02
 
     # Calculate Bid/Ask from Close (or use High/Low for more variance)
-    df['BidPrice'] = df['Close'] - (df['Spread'] / 2)
-    df['AskPrice'] = df['Close'] + (df['Spread'] / 2)
+    df["BidPrice"] = df["Close"] - (df["Spread"] / 2)
+    df["AskPrice"] = df["Close"] + (df["Spread"] / 2)
 
     return df
 
@@ -51,13 +51,15 @@ def add_liquidity_depth(df: pd.DataFrame) -> pd.DataFrame:
     # To vary per call, we might rely on global state changing.
     liquidity_factor = np.random.uniform(0.01, 0.05, size=len(df))
 
-    df['BidSize'] = (df['Volume'] * liquidity_factor).astype(int)
+    df["BidSize"] = (df["Volume"] * liquidity_factor).astype(int)
     # Make AskSize slightly different to create imbalance signals
-    df['AskSize'] = (df['Volume'] * liquidity_factor * np.random.uniform(0.8, 1.2, size=len(df))).astype(int)
+    df["AskSize"] = (
+        df["Volume"] * liquidity_factor * np.random.uniform(0.8, 1.2, size=len(df))
+    ).astype(int)
 
     # Ensure at least 1 share/contract (using 100 as standard lot size base if volume permits, else 1)
-    df['BidSize'] = df['BidSize'].clip(lower=1)
-    df['AskSize'] = df['AskSize'].clip(lower=1)
+    df["BidSize"] = df["BidSize"].clip(lower=1)
+    df["AskSize"] = df["AskSize"].clip(lower=1)
 
     return df
 
@@ -71,23 +73,23 @@ def add_last_trade_size(df: pd.DataFrame) -> pd.DataFrame:
     sizes = (np.random.pareto(shape, len(df)) + 1) * 100
 
     # Clip to be realistic (cannot exceed bar volume)
-    df['LastSize'] = np.minimum(sizes, df['Volume']).astype(int)
+    df["LastSize"] = np.minimum(sizes, df["Volume"]).astype(int)
     # Ensure LastSize is at least 1 if Volume > 0
-    df['LastSize'] = np.maximum(df['LastSize'], np.where(df['Volume'] > 0, 1, 0))
+    df["LastSize"] = np.maximum(df["LastSize"], np.where(df["Volume"] > 0, 1, 0))
     return df
 
 
 def mark_data_quality(df: pd.DataFrame) -> pd.DataFrame:
     """Injects data quality flags."""
-    df['DataValid'] = True
+    df["DataValid"] = True
 
     # Mark flat-line periods (no price movement) as suspicious
     # Real bots often pause if price hasn't moved for 5 minutes (data feed crash?)
-    df.loc[df['Close'].pct_change(periods=5) == 0, 'DataValid'] = False
+    df.loc[df["Close"].pct_change(periods=5) == 0, "DataValid"] = False
 
     # Mark low-volume periods as "Low Confidence"
-    low_vol_threshold = df['Volume'].quantile(0.05)
-    df.loc[df['Volume'] < low_vol_threshold, 'DataValid'] = False
+    low_vol_threshold = df["Volume"].quantile(0.05)
+    df.loc[df["Volume"] < low_vol_threshold, "DataValid"] = False
 
     return df
 
@@ -244,7 +246,7 @@ def load_and_clean_data(filepath: str, symbol: Optional[str] = None) -> pd.DataF
         "BidSize",
         "AskSize",
         "LastSize",
-        "DataValid"
+        "DataValid",
     ]
     if not all(col in df.columns for col in required_final):
         pass
@@ -261,7 +263,7 @@ def generate_dummy_data(
     start_price: float = 100.0,
     volatility: float = 0.02,
     freq: str = "1min",
-    seed: Optional[int] = None
+    seed: Optional[int] = None,
 ) -> pd.DataFrame:
     """
     Generate synthetic market data for testing.
@@ -346,14 +348,16 @@ def resample_data(df: pd.DataFrame, timeframe: str = "5min") -> pd.DataFrame:
 
     # Add new columns to aggregation if they exist
     if "BidPrice" in df.columns:
-        agg_dict.update({
-            "BidPrice": "last",
-            "AskPrice": "last",
-            "BidSize": "last",
-            "AskSize": "last",
-            "LastSize": "last",
-            "DataValid": "all"
-        })
+        agg_dict.update(
+            {
+                "BidPrice": "last",
+                "AskPrice": "last",
+                "BidSize": "last",
+                "AskSize": "last",
+                "LastSize": "last",
+                "DataValid": "all",
+            }
+        )
 
     resampled = df.resample(timeframe).agg(agg_dict)
 

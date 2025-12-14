@@ -45,7 +45,9 @@ class Account:
         self.account_number = account_number
 
         # State
-        self.positions: Dict[str, Dict[str, Any]] = {}  # {symbol: {quantity, avgPrice, assetType}}
+        self.positions: Dict[str, Dict[str, Any]] = (
+            {}
+        )  # {symbol: {quantity, avgPrice, assetType}}
         self.day_trades: deque = deque()
         self.opened_positions_today: set = set()
         self._is_pdt_flagged = False
@@ -104,8 +106,14 @@ class Account:
             return self.cash
         return equity * 2.0
 
-    def check_pdt_rule(self, symbol: str, instruction: str, curr_qty: int,
-                       current_equity: float, current_date: datetime.date) -> None:
+    def check_pdt_rule(
+        self,
+        symbol: str,
+        instruction: str,
+        curr_qty: int,
+        current_equity: float,
+        current_date: datetime.date,
+    ) -> None:
         """
         Check and enforce Pattern Day Trading rules.
 
@@ -117,12 +125,16 @@ class Account:
         while self.day_trades and self.day_trades[0] < cutoff_date:
             self.day_trades.popleft()
 
-        is_closing = (instruction in ["SELL", "SELL_TO_CLOSE"] and curr_qty > 0) or \
-                     (instruction in ["BUY_TO_COVER", "BUY_TO_CLOSE"] and curr_qty < 0)
+        is_closing = (instruction in ["SELL", "SELL_TO_CLOSE"] and curr_qty > 0) or (
+            instruction in ["BUY_TO_COVER", "BUY_TO_CLOSE"] and curr_qty < 0
+        )
 
         if is_closing and symbol in self.opened_positions_today:
             day_trade_count = len(self.day_trades) + 1
-            if day_trade_count >= self.PDT_DAY_TRADE_LIMIT and current_equity < self.PDT_MIN_EQUITY:
+            if (
+                day_trade_count >= self.PDT_DAY_TRADE_LIMIT
+                and current_equity < self.PDT_MIN_EQUITY
+            ):
                 self._is_pdt_flagged = True
                 raise ValueError(
                     f"403 Forbidden: Pattern Day Trader Restriction. "
@@ -130,9 +142,16 @@ class Account:
                     f"and {day_trade_count} day trades in {self.PDT_LOOKBACK_DAYS} days."
                 )
 
-    def execute_trade(self, symbol: str, quantity: float, price: float,
-                      instruction: str, asset_type: str, trade_date: datetime.date,
-                      buying_power_check: float) -> None:
+    def execute_trade(
+        self,
+        symbol: str,
+        quantity: float,
+        price: float,
+        instruction: str,
+        asset_type: str,
+        trade_date: datetime.date,
+        buying_power_check: float,
+    ) -> None:
         """
         Update account state for a trade execution.
 
@@ -148,7 +167,7 @@ class Account:
                 trade_date=trade_date,
                 quantity=quantity,
                 price=price,
-                asset_type=asset_type
+                asset_type=asset_type,
             )
 
         # Init position
@@ -166,7 +185,7 @@ class Account:
         # Validate & Update
         if instruction in ["BUY", "BUY_TO_COVER", "BUY_TO_OPEN"]:
             if total_cost > buying_power_check:
-                 raise ValueError(
+                raise ValueError(
                     f"Insufficient Buying Power: Required {total_cost}, Available {buying_power_check}"
                 )
 

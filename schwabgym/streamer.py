@@ -19,10 +19,11 @@ class MockStreamer:
 
     Streams Level 1 data from the simulator's PriceEngine.
     """
+
     def __init__(self, client, queue_size=100):
         self.client = client
         self.listening = False
-        self.subscriptions = {} # store active subscriptions
+        self.subscriptions = {}  # store active subscriptions
 
     async def start(self, receiver: Callable):
         """
@@ -43,35 +44,38 @@ class MockStreamer:
             if current_step > last_step:
                 last_step = current_step
 
-                # If we have subscriptions, generate messages
-                # For now, we mainly support LEVELONE_EQUITIES
+                # Generate messages for active subscriptions
                 if "LEVELONE_EQUITIES" in self.subscriptions:
                     symbols = self.subscriptions["LEVELONE_EQUITIES"]
                     quotes = self.client.price_engine.get_quotes_data(symbols)
 
                     # Transform to stream format
                     # Schwab stream format is usually a list of dicts or a specialized object
-                    # We'll send a JSON-like dict as expected by handlers
 
                     content = []
                     for sym, data in quotes.items():
                         q = data["quote"]
-                        content.append({
-                            "key": sym,
-                            "1": q["bidPrice"],
-                            "2": q["askPrice"],
-                            "3": q["lastPrice"],
-                            "4": q["bidSize"],
-                            "5": q["askSize"],
-                            "8": q["totalVolume"],
-                            "9": q["lastSize"],
-                            # Add more fields as needed mapping to stream IDs
-                        })
+                        content.append(
+                            {
+                                "key": sym,
+                                "1": q["bidPrice"],
+                                "2": q["askPrice"],
+                                "3": q["lastPrice"],
+                                "4": q["bidSize"],
+                                "5": q["askSize"],
+                                "8": q["totalVolume"],
+                                "9": q["lastSize"],
+                                # Add more fields as needed mapping to stream IDs
+                            }
+                        )
 
                     msg = {
                         "service": "LEVELONE_EQUITIES",
-                        "timestamp": int(self.client.price_engine.get_current_time().timestamp() * 1000),
-                        "content": content
+                        "timestamp": int(
+                            self.client.price_engine.get_current_time().timestamp()
+                            * 1000
+                        ),
+                        "content": content,
                     }
 
                     # Call receiver (awaitable or callable)
@@ -81,9 +85,6 @@ class MockStreamer:
                         receiver(msg)
 
             # Yield control to allow other tasks to run
-            # In a real gym loop, step() is called manually.
-            # If the user is running an async loop alongside manual stepping,
-            # this sleep allows them to interleave.
             await asyncio.sleep(0.001)
 
     def send(self, requests):
@@ -92,24 +93,15 @@ class MockStreamer:
 
         Mimics streamer.send(requests).
         """
-        # requests is typically a StreamerRequest object or similar
-        # For parity, we assume it has 'service', 'command', 'parameters'
-        # But schwab-py might wrap this.
-        # If the user passes raw requests:
-
-        # Example request:
-        # streamer.send(streamer.level_one_equities("AAPL", "AMD"))
-
-        # We need to handle whatever schwab-py sends.
-        # Since we don't import schwab-py, we inspect the object.
-        pass # To be implemented if we want full parity, but for now we can just assume basic usage.
+        # TODO: Implement full request parsing
+        pass
 
         # If requests is a list of requests
         if not isinstance(requests, list):
             requests = [requests]
 
         for req in requests:
-            # simple duck typing
+            # Duck typing for request objects
             service = getattr(req, "service", None)
             command = getattr(req, "command", None)
             params = getattr(req, "parameters", {})

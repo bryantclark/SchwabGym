@@ -63,7 +63,9 @@ def fast_client(sample_data):
 
     engine = FastExecutionEngine()
     # Also disable latency for fast client tests
-    return MockClient(sample_data, initial_cash=10000.0, execution_engine=engine, latency_mode=False)
+    return MockClient(
+        sample_data, initial_cash=10000.0, execution_engine=engine, latency_mode=False
+    )
 
 
 @pytest.fixture

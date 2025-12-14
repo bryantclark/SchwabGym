@@ -3,16 +3,21 @@ Tests for Account Logic
 =======================
 """
 
-import pytest
 import datetime
+
+import pytest
+
 from schwabgym.account import Account
+
 
 @pytest.fixture
 def account():
     return Account(initial_cash=30000.0)
 
+
 def mock_price_lookup(symbol):
     return 100.0
+
 
 class TestAccount:
     def test_initialization(self, account):
@@ -24,12 +29,20 @@ class TestAccount:
         assert account.calculate_equity(mock_price_lookup) == 30000.0
 
         # With position
-        account.positions["TEST"] = {"quantity": 10, "avgPrice": 90.0, "assetType": "EQUITY"}
+        account.positions["TEST"] = {
+            "quantity": 10,
+            "avgPrice": 90.0,
+            "assetType": "EQUITY",
+        }
         # Equity = 30000 + (10 * 100) = 31000
         assert account.calculate_equity(mock_price_lookup) == 31000.0
 
         # With short position
-        account.positions["SHORT"] = {"quantity": -10, "avgPrice": 110.0, "assetType": "EQUITY"}
+        account.positions["SHORT"] = {
+            "quantity": -10,
+            "avgPrice": 110.0,
+            "assetType": "EQUITY",
+        }
         # Equity = 31000 - (10 * 100) = 30000
         assert account.calculate_equity(mock_price_lookup) == 30000.0
 
@@ -45,7 +58,7 @@ class TestAccount:
 
     def test_execute_trade_insufficient_bp(self, account):
         trade_date = datetime.date(2023, 1, 1)
-        bp = 100.0 # Low BP
+        bp = 100.0  # Low BP
 
         with pytest.raises(ValueError, match="Insufficient Buying Power"):
             account.execute_trade("AAPL", 10, 150.0, "BUY", "EQUITY", trade_date, bp)
@@ -61,7 +74,7 @@ class TestAccount:
         account.execute_trade("AAPL", 5, 160.0, "SELL", "EQUITY", trade_date, bp)
 
         assert account.positions["AAPL"]["quantity"] == 5
-        assert account.cash > (30000.0 - 1500.0 + 800.0 - 1.0) # approx check for fees
+        assert account.cash > (30000.0 - 1500.0 + 800.0 - 1.0)  # approx check for fees
 
     def test_execute_trade_short(self, account):
         trade_date = datetime.date(2023, 1, 1)
@@ -70,7 +83,7 @@ class TestAccount:
         account.execute_trade("AAPL", 10, 150.0, "SELL_SHORT", "EQUITY", trade_date, bp)
 
         assert account.positions["AAPL"]["quantity"] == -10
-        assert account.cash > 30000.0 + 1500.0 - 1.0 # Cash increases on short sale
+        assert account.cash > 30000.0 + 1500.0 - 1.0  # Cash increases on short sale
 
     def test_pdt_rule(self, account):
         # Set equity low

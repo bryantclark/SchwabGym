@@ -10,9 +10,9 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 from schwabgym.account import Account
-from schwabgym.prices import PriceEngine
-from schwabgym.physics import ExecutionEngine
 from schwabgym.orders import MockResponse
+from schwabgym.physics import ExecutionEngine
+from schwabgym.prices import PriceEngine
 
 logger = logging.getLogger(__name__)
 
@@ -30,20 +30,26 @@ class OrderManager:
         pending_orders (List): Orders delayed by simulated latency.
     """
 
-    def __init__(self, account: Account, price_engine: PriceEngine, execution_engine: ExecutionEngine, latency_mode: bool = True):
+    def __init__(
+        self,
+        account: Account,
+        price_engine: PriceEngine,
+        execution_engine: ExecutionEngine,
+        latency_mode: bool = True,
+    ):
         self.account = account
         self.price_engine = price_engine
         self.execution_engine = execution_engine
 
         self.orders: Dict[int, Dict] = {}
         self.working_orders: List[Dict] = []
-        self.pending_orders: List[Dict] = [] # Tuple of (release_time_step, order)
+        self.pending_orders: List[Dict] = []
         self.next_order_id = 1000
 
         # Configuration
         self.latency_mode = latency_mode
         self.latency_steps = 1 if latency_mode else 0
-        self.strict_limit_orders = False # If True, requires price to cross limit, not just touch
+        self.strict_limit_orders = False
 
     def reset(self) -> None:
         """Reset order history."""
@@ -87,21 +93,19 @@ class OrderManager:
 
             elif order_type == "LIMIT":
                 self.working_orders.append(order)
-                order["status"] = "WORKING" # Set to WORKING immediately for non-latency
+                order["status"] = "WORKING"
                 logger.info(f"Queued LIMIT order: {order_id}")
                 return self._success_response(order_id)
             else:
-                 return MockResponse({"error": "Unsupported order type"}, 400)
+                return MockResponse({"error": "Unsupported order type"}, 400)
 
         # Simulate Latency: Add to pending queue
-        # Release time is current step + latency
         release_step = self.price_engine.current_step + self.latency_steps
-        self.pending_orders.append({
-            "release_step": release_step,
-            "order": order
-        })
+        self.pending_orders.append({"release_step": release_step, "order": order})
 
-        logger.info(f"Order {order_id} placed, pending activation until step {release_step}")
+        logger.info(
+            f"Order {order_id} placed, pending activation until step {release_step}"
+        )
 
         return self._success_response(order_id)
 
@@ -133,8 +137,10 @@ class OrderManager:
             order = self.orders[order_id]
             if order["status"] in ["FILLED", "CANCELED", "REJECTED", "EXPIRED"]:
                 return MockResponse(
-                    {"error": f"Order {order_id} is already {order['status']}, cannot cancel."},
-                    400
+                    {
+                        "error": f"Order {order_id} is already {order['status']}, cannot cancel."
+                    },
+                    400,
                 )
 
         return MockResponse({"error": "Order not found"}, 404)
@@ -182,9 +188,8 @@ class OrderManager:
         # 2. Process Working Orders
         remaining_orders = []
 
-        # We need to loop carefully because market_data depends on symbol
-        # But working_orders might have different symbols.
-        # So inside loop, get data for that order's symbol.
+        # Process working orders
+        # Note: market_data depends on symbol, so we fetch it per order.
 
         for order in self.working_orders:
             leg = order["orderLegCollection"][0]
@@ -202,7 +207,7 @@ class OrderManager:
 
             if order_type == "LIMIT":
                 # Strict Mode: Price must cross through limit
-                # Touch Mode: Low/High touching limit is enough (traditional backtest)
+                # Touch Mode: Low/High touching limit is enough
 
                 open_p = market_data["Open"]
                 high_p = market_data["High"]
@@ -215,11 +220,10 @@ class OrderManager:
                         # Case 1: Gap down (Open < Limit) -> Fill at Open (better price)
                         # Case 2: Intraday cross (Open > Limit, Low < Limit)
                         if open_p < limit_price:
-                            should_fill = True # Gapped below
+                            should_fill = True  # Gapped below
                             # TODO: Price improvement logic (fill at Open)
                         elif low_p < limit_price:
-                            # It traded below limit.
-                            # If Close > Limit, it bounced.
+                            # Traded below limit. If Close > Limit, it bounced.
                             should_fill = True
                     else:
                         # Touch mode (Default)
@@ -233,19 +237,23 @@ class OrderManager:
                         elif high_p > limit_price:
                             should_fill = True
                     else:
-                         if high_p >= limit_price:
+                        if high_p >= limit_price:
                             should_fill = True
 
             if should_fill:
                 try:
                     self._execute_trade_leg(leg, limit_price)
                     order["status"] = "FILLED"
-                    order["closeTime"] = self.price_engine.get_current_time().isoformat()
+                    order["closeTime"] = (
+                        self.price_engine.get_current_time().isoformat()
+                    )
                     logger.info(f"Filled LIMIT order {order['orderId']}")
                 except Exception as e:
                     logger.error(f"Failed to execute LIMIT order: {e}")
                     order["status"] = "REJECTED"
-                    order["cancelTime"] = self.price_engine.get_current_time().isoformat()
+                    order["cancelTime"] = (
+                        self.price_engine.get_current_time().isoformat()
+                    )
             else:
                 remaining_orders.append(order)
 
@@ -262,7 +270,7 @@ class OrderManager:
                 base_price=current_price,
                 quantity=leg["quantity"],
                 instruction=leg["instruction"],
-                market_data=market_data
+                market_data=market_data,
             )
 
             try:
@@ -274,7 +282,7 @@ class OrderManager:
                 order["status"] = "REJECTED"
                 order["cancelTime"] = self.price_engine.get_current_time().isoformat()
                 logger.error(f"Market order rejected: {e}")
-                return str(e) # Return error message
+                return str(e)  # Return error message
 
         return None
 
@@ -286,14 +294,17 @@ class OrderManager:
         asset_type = leg["instrument"].get("assetType", "EQUITY")
 
         # Current equity/bp needed for checks
-        # Note: account equity calc uses current prices of all positions
-        current_equity = self.account.calculate_equity(self.price_engine.get_current_price)
+        current_equity = self.account.calculate_equity(
+            self.price_engine.get_current_price
+        )
         buying_power = self.account.calculate_buying_power(current_equity)
         current_date = self.price_engine.get_current_time().date()
 
         # PDT Check
         curr_pos = self.account.positions.get(symbol, {"quantity": 0})["quantity"]
-        self.account.check_pdt_rule(symbol, instruction, curr_pos, current_equity, current_date)
+        self.account.check_pdt_rule(
+            symbol, instruction, curr_pos, current_equity, current_date
+        )
 
         # Execute
         self.account.execute_trade(
@@ -303,12 +314,14 @@ class OrderManager:
             instruction=instruction,
             asset_type=asset_type,
             trade_date=current_date,
-            buying_power_check=buying_power
+            buying_power_check=buying_power,
         )
 
     def _success_response(self, order_id: int) -> MockResponse:
         return MockResponse(
             {},
             201,
-            headers={"Location": f"https://api.schwab.com/v1/accounts/{self.account.account_number}/orders/{order_id}"}
+            headers={
+                "Location": f"https://api.schwab.com/v1/accounts/{self.account.account_number}/orders/{order_id}"
+            },
         )
