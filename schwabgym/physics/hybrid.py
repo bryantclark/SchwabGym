@@ -10,7 +10,6 @@ License: MIT
 """
 
 import logging
-from typing import Dict, Optional
 
 import numpy as np
 
@@ -37,9 +36,9 @@ class HybridExecutionEngine(ExecutionEngine):
     def __init__(
         self,
         realistic_probability: float = 0.3,
-        fast_engine: Optional[FastExecutionEngine] = None,
-        realistic_engine: Optional[RealisticExecutionEngine] = None,
-        seed: Optional[int] = None,
+        fast_engine: FastExecutionEngine | None = None,
+        realistic_engine: RealisticExecutionEngine | None = None,
+        seed: int | None = None,
     ):
         """
         Initialize hybrid execution engine.
@@ -56,14 +55,14 @@ class HybridExecutionEngine(ExecutionEngine):
         self.p_realistic = realistic_probability
         self.fast = fast_engine or FastExecutionEngine()
         self.realistic = realistic_engine or RealisticExecutionEngine()
-        self.current_mode = None
+        self.current_mode: PhysicsMode | None = None
 
         if seed is not None:
             np.random.seed(seed)
 
         logger.info(
             f"HybridExecutionEngine initialized "
-            f"(realistic_prob={realistic_probability*100:.0f}%)"
+            f"(realistic_prob={realistic_probability * 100:.0f}%)"
         )
 
     def _select_engine(self) -> ExecutionEngine:
@@ -76,7 +75,7 @@ class HybridExecutionEngine(ExecutionEngine):
             return self.fast
 
     def calculate_execution_price(
-        self, base_price: float, quantity: int, instruction: str, market_data: Dict
+        self, base_price: float, quantity: int, instruction: str, market_data: dict
     ) -> float:
         """Delegate to randomly selected engine."""
         engine = self._select_engine()
@@ -98,7 +97,7 @@ class HybridExecutionEngine(ExecutionEngine):
             limit_price, market_high, market_low, volume, quantity
         )
 
-    def get_statistics(self) -> Dict:
+    def get_statistics(self) -> dict:
         """
         Return usage statistics.
 

@@ -20,7 +20,6 @@ import numpy as np
 import pandas as pd
 
 from schwabgym.client import MockClient
-from schwabgym.data import load_and_clean_data
 from schwabgym.orders import MockEquities as eq
 from schwabgym.physics import (
     AlmgrenChrissOptimalExecutor,
@@ -131,11 +130,11 @@ def demonstrate_almgren_chriss(df, ticker="AAPL"):
     returns = np.log(df["Close"] / df["Close"].shift(1)).dropna()
     volatility = returns.std() * np.sqrt(252)  # Annualized
 
-    logger.info(f"\nScenario:")
+    logger.info("\nScenario:")
     logger.info(f"  Total order: {total_shares:,} shares")
     logger.info(f"  Time horizon: {T} day")
     logger.info(f"  Number of slices: {N}")
-    logger.info(f"  Estimated volatility: {volatility*100:.2f}%")
+    logger.info(f"  Estimated volatility: {volatility * 100:.2f}%")
 
     # Compare risk aversion levels
     for lambda_risk in [0.0, 0.01, 0.1]:
@@ -154,7 +153,7 @@ def demonstrate_almgren_chriss(df, ticker="AAPL"):
             f"    First slice: {trajectory[0]:>6,} shares ({front_load_pct:>5.1f}%)"
         )
         logger.info(
-            f"    Schedule: {[int(x) for x in trajectory[:3]]}... " f"(first 3 periods)"
+            f"    Schedule: {[int(x) for x in trajectory[:3]]}... (first 3 periods)"
         )
 
 
@@ -171,7 +170,8 @@ def train_with_domain_randomization(df, ticker="AAPL"):
 
     # Create hybrid engine
     hybrid_engine = HybridExecutionEngine(
-        realistic_probability=0.3, seed=42  # 30% realistic, 70% fast
+        realistic_probability=0.3,
+        seed=42,  # 30% realistic, 70% fast
     )
 
     client = MockClient(df, initial_cash=50000, execution_engine=hybrid_engine)
@@ -182,7 +182,7 @@ def train_with_domain_randomization(df, ticker="AAPL"):
     realistic_count = 0
 
     logger.info(f"\nRunning {n_episodes} episodes...")
-    logger.info(f"Physics mix: 30% Realistic, 70% Fast\n")
+    logger.info("Physics mix: 30% Realistic, 70% Fast\n")
 
     episode_results = []
 
@@ -212,7 +212,7 @@ def train_with_domain_randomization(df, ticker="AAPL"):
 
         episode_results.append({"episode": episode + 1, "mode": mode, "pnl": pnl})
 
-        logger.info(f"Episode {episode+1:>2}: Mode={mode:>10s} | P&L=${pnl:>8.2f}")
+        logger.info(f"Episode {episode + 1:>2}: Mode={mode:>10s} | P&L=${pnl:>8.2f}")
 
     # Statistics
     logger.info("\n" + "-" * 70)
@@ -224,11 +224,11 @@ def train_with_domain_randomization(df, ticker="AAPL"):
 
     logger.info(
         f"Realistic mode used: {realistic_count}/{n_episodes} episodes "
-        f"({realistic_count/n_episodes*100:.1f}%)"
+        f"({realistic_count / n_episodes * 100:.1f}%)"
     )
     logger.info(f"Average P&L: ${avg_pnl:.2f}")
     logger.info(f"P&L Std Dev: ${std_pnl:.2f}")
-    logger.info(f"Sharpe-like ratio: {avg_pnl/std_pnl if std_pnl > 0 else 0:.2f}")
+    logger.info(f"Sharpe-like ratio: {avg_pnl / std_pnl if std_pnl > 0 else 0:.2f}")
 
     # Show why this matters
     logger.info("\n" + "-" * 70)

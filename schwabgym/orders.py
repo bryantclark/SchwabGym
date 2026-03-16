@@ -10,7 +10,7 @@ Repository: https://github.com/bryantclark/SchwabGym
 License: MIT
 """
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class MockResponse:
@@ -23,7 +23,10 @@ class MockResponse:
     """
 
     def __init__(
-        self, json_data: Dict, status_code: int = 200, headers: Optional[Dict] = None
+        self,
+        json_data: dict | list,
+        status_code: int = 200,
+        headers: dict | None = None,
     ):
         """
         Initialize mock response.
@@ -37,14 +40,14 @@ class MockResponse:
         self.status_code = status_code
         self.headers = headers or {}
 
-    def json(self) -> Dict:
-        """Return JSON response body."""
+    def json(self) -> Any:
+        """Return JSON response body (dict or list, matching httpx.Response)."""
         return self._json_data
 
     def raise_for_status(self) -> None:
         """Raise exception if status code indicates error."""
         if self.status_code >= 400:
-            raise Exception(f"HTTP {self.status_code}: {self._json_data}")
+            raise RuntimeError(f"HTTP {self.status_code}: {self._json_data}")
 
 
 class MockEquities:
@@ -63,9 +66,9 @@ class MockEquities:
         quantity: int,
         instruction: str,
         order_type: str = "MARKET",
-        price: Optional[float] = None,
-        stop_price: Optional[float] = None,
-    ) -> Dict[str, Any]:
+        price: float | None = None,
+        stop_price: float | None = None,
+    ) -> dict[str, Any]:
         """
         Base order template.
 
@@ -103,7 +106,7 @@ class MockEquities:
         return order
 
     @staticmethod
-    def equity_buy_market(symbol: str, quantity: int) -> Dict[str, Any]:
+    def equity_buy_market(symbol: str, quantity: int) -> dict[str, Any]:
         """
         Market buy order.
 
@@ -117,7 +120,7 @@ class MockEquities:
         return MockEquities._base_order(symbol, quantity, "BUY", "MARKET")
 
     @staticmethod
-    def equity_sell_market(symbol: str, quantity: int) -> Dict[str, Any]:
+    def equity_sell_market(symbol: str, quantity: int) -> dict[str, Any]:
         """
         Market sell order.
 
@@ -131,7 +134,7 @@ class MockEquities:
         return MockEquities._base_order(symbol, quantity, "SELL", "MARKET")
 
     @staticmethod
-    def equity_sell_short_market(symbol: str, quantity: int) -> Dict[str, Any]:
+    def equity_sell_short_market(symbol: str, quantity: int) -> dict[str, Any]:
         """
         Market short sell order.
 
@@ -145,7 +148,7 @@ class MockEquities:
         return MockEquities._base_order(symbol, quantity, "SELL_SHORT", "MARKET")
 
     @staticmethod
-    def equity_buy_to_cover_market(symbol: str, quantity: int) -> Dict[str, Any]:
+    def equity_buy_to_cover_market(symbol: str, quantity: int) -> dict[str, Any]:
         """
         Market buy to cover (close short position).
 
@@ -159,7 +162,7 @@ class MockEquities:
         return MockEquities._base_order(symbol, quantity, "BUY_TO_COVER", "MARKET")
 
     @staticmethod
-    def equity_buy_limit(symbol: str, quantity: int, price: float) -> Dict[str, Any]:
+    def equity_buy_limit(symbol: str, quantity: int, price: float) -> dict[str, Any]:
         """
         Limit buy order.
 
@@ -174,7 +177,7 @@ class MockEquities:
         return MockEquities._base_order(symbol, quantity, "BUY", "LIMIT", price=price)
 
     @staticmethod
-    def equity_sell_limit(symbol: str, quantity: int, price: float) -> Dict[str, Any]:
+    def equity_sell_limit(symbol: str, quantity: int, price: float) -> dict[str, Any]:
         """
         Limit sell order.
 
@@ -191,7 +194,7 @@ class MockEquities:
     @staticmethod
     def equity_buy_stop(
         symbol: str, quantity: int, stop_price: float
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Stop buy order (buy when price rises above stop).
 
@@ -210,7 +213,7 @@ class MockEquities:
     @staticmethod
     def equity_sell_stop(
         symbol: str, quantity: int, stop_price: float
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Stop sell order (sell when price falls below stop).
 
@@ -241,8 +244,8 @@ class MockOptions:
         quantity: int,
         instruction: str,
         order_type: str = "MARKET",
-        price: Optional[float] = None,
-    ) -> Dict[str, Any]:
+        price: float | None = None,
+    ) -> dict[str, Any]:
         """Base option order template."""
         order = {
             "orderType": order_type,
@@ -264,7 +267,7 @@ class MockOptions:
         return order
 
     @staticmethod
-    def option_buy_to_open_market(symbol: str, quantity: int) -> Dict[str, Any]:
+    def option_buy_to_open_market(symbol: str, quantity: int) -> dict[str, Any]:
         """
         Buy to open option position (market order).
 
@@ -278,7 +281,7 @@ class MockOptions:
         return MockOptions._base_option_order(symbol, quantity, "BUY_TO_OPEN", "MARKET")
 
     @staticmethod
-    def option_sell_to_close_market(symbol: str, quantity: int) -> Dict[str, Any]:
+    def option_sell_to_close_market(symbol: str, quantity: int) -> dict[str, Any]:
         """
         Sell to close option position (market order).
 
@@ -294,7 +297,7 @@ class MockOptions:
         )
 
     @staticmethod
-    def option_sell_to_open_market(symbol: str, quantity: int) -> Dict[str, Any]:
+    def option_sell_to_open_market(symbol: str, quantity: int) -> dict[str, Any]:
         """
         Sell to open option position (write options).
 
@@ -310,7 +313,7 @@ class MockOptions:
         )
 
     @staticmethod
-    def option_buy_to_close_market(symbol: str, quantity: int) -> Dict[str, Any]:
+    def option_buy_to_close_market(symbol: str, quantity: int) -> dict[str, Any]:
         """
         Buy to close option position (close short).
 

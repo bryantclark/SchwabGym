@@ -21,13 +21,13 @@ Example Usage:
     >>> from schwabgym import MockClient, load_and_clean_data
     >>> from schwabgym.orders import MockEquities as eq
     >>>
-    >>> df = load_and_clean_data('AAPL_5min.csv')
+    >>> df = load_and_clean_data("AAPL_5min.csv")
     >>> client = MockClient(df, initial_cash=25000)
     >>>
     >>> # Trading exactly like schwab-py
-    >>> account_hash = client.get_account_numbers().json()['hashValue']
-    >>> quote = client.get_quotes('AAPL')
-    >>> order = eq.equity_buy_market('AAPL', 100)
+    >>> account_hash = client.get_account_numbers().json()["hashValue"]
+    >>> quote = client.get_quotes("AAPL")
+    >>> order = eq.equity_buy_market("AAPL", 100)
     >>> client.place_order(account_hash, order)
 
 For RL Training (Batteries-Included Pattern):
@@ -35,9 +35,12 @@ For RL Training (Batteries-Included Pattern):
     >>> from gymnasium import spaces
     >>>
     >>> # 1. Define your strategy's view of the world
-    >>> def my_reward_fn(client): return 0.0
-    >>> def my_action_fn(client, action): pass
-    >>> def my_obs_fn(client): return []
+    >>> def my_reward_fn(client):
+    ...     return 0.0
+    >>> def my_action_fn(client, action):
+    ...     pass
+    >>> def my_obs_fn(client):
+    ...     return []
     >>>
     >>> # 2. Inject into the generic environment
     >>> env = SchwabTradingEnv(
@@ -127,7 +130,7 @@ def get_info():
 
 
 # ASCII banner for CLI
-BANNER = r"""
+BANNER = rf"""
   ____       _                 _     ____
  / ___|  ___| |____      ____ _| |__ / ___|_   _ _ __ ___
  \___ \ / __| '_ \ \ /\ / / _` | '_ \| |  _| | | | '_ ` _ \
@@ -135,11 +138,9 @@ BANNER = r"""
  |____/ \___|_| |_|\_/\_/ \__,_|_.__/ \____|\__, |_| |_| |_|
                                             |___/
         High-Fidelity RL Environment for Algorithmic Trading
-        Version: {version} | Author: {author}
-        {repository}
-""".format(
-    version=__version__, author=__author__, repository=__repository__
-)
+        Version: {__version__} | Author: {__author__}
+        {__repository__}
+"""
 
 
 def print_banner():
@@ -188,7 +189,8 @@ def check_dependencies():
 
         warnings.warn(
             f"Optional dependencies not installed: {', '.join(missing_optional)}\n"
-            f"Some features may not be available."
+            f"Some features may not be available.",
+            stacklevel=2,
         )
 
     return True
@@ -200,4 +202,4 @@ try:
 except ImportError as e:
     import warnings
 
-    warnings.warn(str(e))
+    warnings.warn(str(e), stacklevel=1)

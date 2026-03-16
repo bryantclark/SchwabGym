@@ -15,11 +15,11 @@ from setuptools import find_packages, setup
 
 # Read long description from README
 here = os.path.abspath(os.path.dirname(__file__))
-with open(os.path.join(here, "README.md"), "r", encoding="utf-8") as fh:
+with open(os.path.join(here, "README.md"), encoding="utf-8") as fh:
     long_description = fh.read()
 
 # Read requirements
-with open(os.path.join(here, "requirements.txt"), "r", encoding="utf-8") as fh:
+with open(os.path.join(here, "requirements.txt"), encoding="utf-8") as fh:
     requirements = [
         line.strip() for line in fh if line.strip() and not line.startswith("#")
     ]
@@ -57,8 +57,7 @@ setup(
         "dev": [
             "pytest>=7.4.0",
             "pytest-cov>=4.1.0",
-            "black>=23.7.0",
-            "flake8>=6.1.0",
+            "ruff>=0.4.0",
             "mypy>=1.5.0",
         ],
         "rl": [

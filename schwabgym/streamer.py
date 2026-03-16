@@ -6,9 +6,8 @@ Mimics the schwab-py Streamer interface for async data streaming.
 """
 
 import asyncio
-import json
 import logging
-from typing import Callable, Optional
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -112,8 +111,6 @@ class MockStreamer:
 
             if command == "SUBS" or command == "ADD":
                 keys = params.get("keys", "")
-                fields = params.get("fields", "")
-
                 symbols = keys.split(",") if isinstance(keys, str) else keys
 
                 logger.info(f"Streamer subscribing to {service}: {symbols}")

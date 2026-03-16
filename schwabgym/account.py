@@ -8,7 +8,7 @@ Manages account state, balances, positions, and regulatory rules (PDT, Margin).
 import datetime
 import logging
 from collections import deque
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from schwabgym.fees import FeeCalculator
 
@@ -45,16 +45,16 @@ class Account:
         self.account_number = account_number
 
         # State
-        self.positions: Dict[str, Dict[str, Any]] = (
-            {}
-        )  # {symbol: {quantity, avgPrice, assetType}}
+        self.positions: dict[
+            str, dict[str, Any]
+        ] = {}  # {symbol: {quantity, avgPrice, assetType}}
         self.day_trades: deque = deque()
         self.opened_positions_today: set = set()
         self._is_pdt_flagged = False
 
         self.fee_calculator = FeeCalculator()
 
-    def reset(self, initial_cash: Optional[float] = None) -> None:
+    def reset(self, initial_cash: float | None = None) -> None:
         """Reset account to initial state."""
         if initial_cash is not None:
             self.cash = float(initial_cash)
@@ -70,7 +70,7 @@ class Account:
         """Called when simulation date changes."""
         self.opened_positions_today.clear()
 
-    def calculate_market_value(self, price_lookup_func) -> Tuple[float, float]:
+    def calculate_market_value(self, price_lookup_func) -> tuple[float, float]:
         """
         Calculate long and short market values.
 
@@ -165,9 +165,9 @@ class Account:
         if instruction in ["SELL", "SELL_SHORT", "SELL_TO_CLOSE"]:
             reg_fees = self.fee_calculator.calculate_total_regulatory_fees(
                 trade_date=trade_date,
-                quantity=quantity,
+                quantity=int(quantity),
                 price=price,
-                asset_type=asset_type,
+                asset_type=asset_type,  # type: ignore[arg-type]
             )
 
         # Init position

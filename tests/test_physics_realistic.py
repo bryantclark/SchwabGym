@@ -1,4 +1,3 @@
-import numpy as np
 import pytest
 
 from schwabgym.physics.realistic import RealisticExecutionEngine

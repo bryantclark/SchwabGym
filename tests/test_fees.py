@@ -11,8 +11,6 @@ import datetime
 
 import pytest
 
-from schwabgym.fees import FeeCalculator
-
 
 class TestSECFees:
     """Test SEC Section 31 fee calculations."""

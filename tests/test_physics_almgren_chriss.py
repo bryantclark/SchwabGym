@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 
 from schwabgym.physics.almgren_chriss import AlmgrenChrissOptimalExecutor
 

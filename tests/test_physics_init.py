@@ -1,7 +1,6 @@
 import pytest
 
 from schwabgym.physics import (
-    AlmgrenChrissOptimalExecutor,
     FastExecutionEngine,
     HybridExecutionEngine,
     RealisticExecutionEngine,

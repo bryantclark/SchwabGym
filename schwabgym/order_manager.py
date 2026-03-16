@@ -5,9 +5,8 @@ SchwabGym Order Manager
 Handles order validation, processing, execution, and history.
 """
 
-import datetime
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from schwabgym.account import Account
 from schwabgym.orders import MockResponse
@@ -41,9 +40,9 @@ class OrderManager:
         self.price_engine = price_engine
         self.execution_engine = execution_engine
 
-        self.orders: Dict[int, Dict] = {}
-        self.working_orders: List[Dict] = []
-        self.pending_orders: List[Dict] = []
+        self.orders: dict[int, dict] = {}
+        self.working_orders: list[dict] = []
+        self.pending_orders: list[dict] = []
         self.next_order_id = 1000
 
         # Configuration
@@ -58,7 +57,7 @@ class OrderManager:
         self.pending_orders.clear()
         self.next_order_id = 1000
 
-    def place_order(self, order: Dict[str, Any]) -> MockResponse:
+    def place_order(self, order: dict[str, Any]) -> MockResponse:
         """
         Validate and place an order.
 
@@ -145,7 +144,7 @@ class OrderManager:
 
         return MockResponse({"error": "Order not found"}, 404)
 
-    def replace_order(self, order_id: int, order_spec: Dict[str, Any]) -> MockResponse:
+    def replace_order(self, order_id: int, order_spec: dict[str, Any]) -> MockResponse:
         """Replace an order."""
         cancel_resp = self.cancel_order(order_id)
         if cancel_resp.status_code != 200:
@@ -212,7 +211,6 @@ class OrderManager:
                 open_p = market_data["Open"]
                 high_p = market_data["High"]
                 low_p = market_data["Low"]
-                close_p = market_data["Close"]
 
                 if instruction in ["BUY", "BUY_TO_COVER"]:
                     if self.strict_limit_orders:
@@ -232,9 +230,7 @@ class OrderManager:
 
                 elif instruction in ["SELL", "SELL_SHORT"]:
                     if self.strict_limit_orders:
-                        if open_p > limit_price:
-                            should_fill = True
-                        elif high_p > limit_price:
+                        if open_p > limit_price or high_p > limit_price:
                             should_fill = True
                     else:
                         if high_p >= limit_price:
@@ -259,7 +255,7 @@ class OrderManager:
 
         self.working_orders = remaining_orders
 
-    def _execute_market_order(self, order: Dict[str, Any]) -> Optional[str]:
+    def _execute_market_order(self, order: dict[str, Any]) -> str | None:
         """Execute immediate market order. Returns error string if rejected, None otherwise."""
         for leg in order["orderLegCollection"]:
             symbol = leg["instrument"]["symbol"]
@@ -286,7 +282,7 @@ class OrderManager:
 
         return None
 
-    def _execute_trade_leg(self, leg: Dict, exec_price: float):
+    def _execute_trade_leg(self, leg: dict, exec_price: float):
         """Execute single leg against account."""
         symbol = leg["instrument"]["symbol"]
         qty = leg["quantity"]

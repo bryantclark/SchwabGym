@@ -11,7 +11,6 @@ License: MIT
 """
 
 import logging
-from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -94,9 +93,41 @@ def mark_data_quality(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def load_and_clean_data(filepath: str, symbol: Optional[str] = None) -> pd.DataFrame:
+def load_and_clean_data(filepath: str, symbol: str | None = None) -> pd.DataFrame:
     """
     Load and preprocess historical market data with dual-price state reconstruction.
+
+    This function handles multiple data formats and reconstructs both raw and adjusted
+    price states needed for realistic simulation:
+    - Raw prices (Close): Used for order execution and PnL
+    - Adjusted prices (AdjClose): Used for technical analysis
+
+    Supports data from:
+    - Alpha Vantage (daily, intraday, adjusted)
+    - Yahoo Finance
+    - Custom CSVs with OHLCV columns
+
+    Args:
+        filepath (str): Path to CSV file
+        symbol (str, optional): Symbol name (for logging)
+
+    Returns:
+        pd.DataFrame: Cleaned dataframe with columns:
+            - Open, High, Low, Close: Raw prices
+            - AdjClose: Adjusted prices
+            - Volume: Share volume
+            - Volatility: Calculated volatility proxy
+
+    Raises:
+        FileNotFoundError: If file doesn't exist (generates dummy data instead)
+        ValueError: If required columns are missing
+
+    Example:
+        >>> df = load_and_clean_data("AAPL_1min.csv")
+        >>> print(df.head())
+        >>> # df.index is DatetimeIndex
+        >>> # df['Close'] = raw execution prices
+        >>> # df['AdjClose'] = adjusted analytical prices
     """
     logger.info(f"Loading data from {filepath}")
 
@@ -146,7 +177,7 @@ def load_and_clean_data(filepath: str, symbol: Optional[str] = None) -> pd.DataF
             logger.info(f"Data range: {df.index[0]} to {df.index[-1]}")
         except Exception as e:
             logger.error(f"Error parsing timestamps: {e}")
-            raise ValueError("Could not parse timestamp column")
+            raise ValueError("Could not parse timestamp column") from e
     else:
         logger.warning("No timestamp column found. Using sequential index.")
         df.index = pd.date_range(start="2020-01-01", periods=len(df), freq="1min")
@@ -218,7 +249,7 @@ def load_and_clean_data(filepath: str, symbol: Optional[str] = None) -> pd.DataF
         if (df[col] <= 0).any():
             logger.error(f"Found non-positive values in {col}")
             df = df[df[col] > 0]
-            logger.warning(f"Removed rows with invalid prices")
+            logger.warning("Removed rows with invalid prices")
 
     # Check for volume
     if (df["Volume"] < 0).any():
@@ -263,13 +294,28 @@ def generate_dummy_data(
     start_price: float = 100.0,
     volatility: float = 0.02,
     freq: str = "1min",
-    seed: Optional[int] = None,
+    seed: int | None = None,
 ) -> pd.DataFrame:
     """
     Generate synthetic market data for testing.
 
     Creates realistic-looking price data using geometric Brownian motion
     with intraday patterns.
+
+    Args:
+        symbol (str): Symbol name
+        periods (int): Number of time periods
+        start_price (float): Initial price
+        volatility (float): Price volatility (standard deviation)
+        freq (str): Time frequency ('1min', '5min', '1H', '1D')
+
+    Returns:
+        pd.DataFrame: Synthetic market data
+
+    Example:
+        >>> df = generate_dummy_data("TEST", periods=500)
+        >>> print(df.shape)
+        (500, 7)
     """
     logger.info(f"Generating {periods} periods of dummy data for {symbol}")
 
@@ -333,6 +379,19 @@ def generate_dummy_data(
 def resample_data(df: pd.DataFrame, timeframe: str = "5min") -> pd.DataFrame:
     """
     Resample data to a different timeframe.
+
+    Aggregates OHLCV data to a coarser timeframe while maintaining
+    dual-price state.
+
+    Args:
+        df (pd.DataFrame): Input dataframe
+        timeframe (str): Target timeframe ('5min', '15min', '1H', '1D', etc.)
+
+    Returns:
+        pd.DataFrame: Resampled dataframe
+
+    Example:
+        >>> df_5min = resample_data(df_1min, "5min")
     """
     logger.info(f"Resampling data to {timeframe}")
 
@@ -372,6 +431,27 @@ def resample_data(df: pd.DataFrame, timeframe: str = "5min") -> pd.DataFrame:
 def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """
     Add common technical indicators to dataframe.
+
+    Adds:
+    - SMA (Simple Moving Average)
+    - EMA (Exponential Moving Average)
+    - RSI (Relative Strength Index)
+    - MACD (Moving Average Convergence Divergence)
+    - Bollinger Bands
+
+    Args:
+        df (pd.DataFrame): Input dataframe
+
+    Returns:
+        pd.DataFrame: Dataframe with added indicator columns
+
+    Note:
+        This is optional - the trading environment calculates indicators
+        internally. Use this for custom strategies.
+
+    Example:
+        >>> df = add_technical_indicators(df)
+        >>> print(df[["Close", "SMA_20", "RSI"]].head())
     """
     logger.info("Adding technical indicators")
 
@@ -408,7 +488,7 @@ def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
 def split_train_test(
     df: pd.DataFrame, train_ratio: float = 0.8
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Split data into training and testing sets.
     """

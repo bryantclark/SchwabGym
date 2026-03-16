@@ -6,12 +6,10 @@ Tests specifically designed to hit edge cases and error paths
 in __init__.py and client.py that are missed by standard unit tests.
 """
 
-import sys
 import unittest.mock as mock
 
 import pytest
 
-import schwabgym
 from schwabgym import (
     MockClient,
     check_dependencies,
@@ -47,9 +45,11 @@ class TestInitModule:
                 raise ImportError("No module named 'pandas'")
             return original_import(name, *args, **kwargs)
 
-        with mock.patch("builtins.__import__", side_effect=mock_import):
-            with pytest.raises(ImportError, match="Missing required dependencies"):
-                check_dependencies()
+        with (
+            mock.patch("builtins.__import__", side_effect=mock_import),
+            pytest.raises(ImportError, match="Missing required dependencies"),
+        ):
+            check_dependencies()
 
     def test_check_dependencies_missing_optional(self):
         """Test dependency check when optional packages are missing (should warn)."""
@@ -61,9 +61,11 @@ class TestInitModule:
                 raise ImportError("No module named 'torch'")
             return original_import(name, *args, **kwargs)
 
-        with mock.patch("builtins.__import__", side_effect=mock_import):
-            with pytest.warns(UserWarning, match="Optional dependencies not installed"):
-                check_dependencies()
+        with (
+            mock.patch("builtins.__import__", side_effect=mock_import),
+            pytest.warns(UserWarning, match="Optional dependencies not installed"),
+        ):
+            check_dependencies()
 
 
 class TestClientAuthEdges:

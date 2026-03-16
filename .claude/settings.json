@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pytest *)",
+      "Bash(python -m pytest *)",
+      "Bash(ruff *)",
+      "Bash(mypy *)",
+      "Bash(python -c *)",
+      "Bash(pip show *)",
+      "Bash(pip list *)",
+      "Bash(ls *)",
+      "Bash(git status *)",
+      "Bash(git log *)",
+      "Bash(git diff *)",
+      "Bash(git branch *)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ruff check --fix --quiet $CLAUDE_FILE_PATHS 2>/dev/null; ruff format --quiet $CLAUDE_FILE_PATHS 2>/dev/null; exit 0"
+          }
+        ]
+      }
+    ]
+  }
+}

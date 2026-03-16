@@ -9,7 +9,6 @@ Author: Bryant Clark
 
 from unittest.mock import MagicMock, Mock
 
-import gymnasium as gym
 import numpy as np
 import pytest
 from gymnasium import spaces

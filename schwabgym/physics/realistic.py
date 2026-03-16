@@ -11,7 +11,6 @@ License: MIT
 """
 
 import logging
-from typing import Dict
 
 import numpy as np
 
@@ -56,7 +55,7 @@ class RealisticExecutionEngine(ExecutionEngine):
         )
 
     def calculate_execution_price(
-        self, base_price: float, quantity: int, instruction: str, market_data: Dict
+        self, base_price: float, quantity: int, instruction: str, market_data: dict
     ) -> float:
         """
         Square Root Law implementation.
@@ -91,10 +90,10 @@ class RealisticExecutionEngine(ExecutionEngine):
 
         logger.debug(
             f"Impact: Q={quantity}, V={volume}, σ={volatility:.4f} "
-            f"→ ΔP={impact*100:.3f}%"
+            f"→ ΔP={impact * 100:.3f}%"
         )
 
-        return execution_price
+        return float(execution_price)
 
     def should_limit_fill(
         self,
@@ -133,7 +132,7 @@ class RealisticExecutionEngine(ExecutionEngine):
         if not filled:
             logger.debug(
                 f"Limit order NOT filled: price touched but insufficient liquidity "
-                f"(P={fill_probability*100:.1f}%, V={volume}, Q={quantity})"
+                f"(P={fill_probability * 100:.1f}%, V={volume}, Q={quantity})"
             )
 
         return filled
@@ -186,4 +185,4 @@ class RealisticExecutionEngine(ExecutionEngine):
         path[0] = open_price
         path[-1] = close
 
-        return path
+        return np.asarray(path)
