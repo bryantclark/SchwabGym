@@ -69,12 +69,6 @@ setup(
             "sphinx-rtd-theme>=1.3.0",
         ],
     },
-    entry_points={
-        "console_scripts": [
-            "schwabgym-demo=schwabgym.cli:demo",
-            "schwabgym-validate=schwabgym.cli:validate_data",
-        ],
-    },
     include_package_data=True,
     zip_safe=False,
     keywords=[

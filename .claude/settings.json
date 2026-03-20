@@ -1,18 +1,24 @@
 {
   "permissions": {
     "allow": [
+      "Bash(make *)",
       "Bash(pytest *)",
       "Bash(python -m pytest *)",
+      "Bash(python *)",
       "Bash(ruff *)",
       "Bash(mypy *)",
       "Bash(python -c *)",
+      "Bash(pip install *)",
       "Bash(pip show *)",
       "Bash(pip list *)",
+      "Bash(coverage *)",
       "Bash(ls *)",
       "Bash(git status *)",
       "Bash(git log *)",
       "Bash(git diff *)",
-      "Bash(git branch *)"
+      "Bash(git branch *)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
     ]
   },
   "hooks": {

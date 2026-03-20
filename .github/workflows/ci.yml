@@ -27,9 +27,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
-      - run: |
-          pip install -e ".[dev]"
-          mypy schwabgym
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: mypy schwabgym
 
   test:
     name: Test (Python ${{ matrix.python-version }})
@@ -37,16 +37,23 @@ jobs:
     needs: [lint]
     strategy:
       matrix:
-        python-version: ['3.10', '3.11']
+        python-version: ['3.10', '3.11', '3.12']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
       - run: pip install -e ".[dev]"
-      - run: pytest --cov --cov-report=term-missing
+      - run: pytest --cov --cov-report=term-missing --cov-report=xml
       - name: Check coverage threshold
         run: coverage report --fail-under=70
+      - name: Upload coverage
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
 
   build_dist:
     name: Verify build artifacts
@@ -57,5 +64,6 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+          cache: pip
       - run: pip install build
       - run: python -m build --sdist --wheel --outdir distcheck && ls -la distcheck
