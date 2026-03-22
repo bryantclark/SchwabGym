@@ -34,7 +34,7 @@ class TestMockResponse:
         resp.raise_for_status()
 
         resp_error = MockResponse({"error": "bad"}, status_code=400)
-        with pytest.raises(Exception):
+        with pytest.raises(RuntimeError):
             resp_error.raise_for_status()
 
 

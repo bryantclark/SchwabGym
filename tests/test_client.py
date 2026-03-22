@@ -285,7 +285,7 @@ def test_client_init_no_data_fallback(valid_df):
     with patch("schwabgym.data.generate_dummy_data") as mock_gen:
         mock_gen.return_value = valid_df
 
-        client = MockClient()
+        _client = MockClient()
         assert mock_gen.called
 
 

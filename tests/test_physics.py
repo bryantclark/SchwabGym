@@ -7,7 +7,6 @@ Test all execution engines for correctness.
 Author: Bryant Clark
 """
 
-import numpy as np
 import pytest
 
 from schwabgym.physics import (

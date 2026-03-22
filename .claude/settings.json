@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make *)",
+      "Bash(pytest *)",
+      "Bash(python -m pytest *)",
+      "Bash(python *)",
+      "Bash(ruff *)",
+      "Bash(mypy *)",
+      "Bash(python -c *)",
+      "Bash(pip install *)",
+      "Bash(pip show *)",
+      "Bash(pip list *)",
+      "Bash(coverage *)",
+      "Bash(ls *)",
+      "Bash(git status *)",
+      "Bash(git log *)",
+      "Bash(git diff *)",
+      "Bash(git branch *)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ruff check --fix --quiet $CLAUDE_FILE_PATHS 2>/dev/null; ruff format --quiet $CLAUDE_FILE_PATHS 2>/dev/null; exit 0"
+          }
+        ]
+      }
+    ]
+  }
+}

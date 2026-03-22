@@ -3,10 +3,6 @@ Tests for Order Management (Client-Level)
 =========================================
 """
 
-import datetime
-
-import pytest
-
 from schwabgym.orders import MockEquities as eq
 
 
@@ -39,7 +35,7 @@ class TestOrderManagement:
         client.place_order(
             client.account_hash, eq.equity_buy_limit("TEST", 10, current_price * 0.5)
         )
-        order_id = list(client.orders.keys())[0]
+        order_id = next(iter(client.orders.keys()))
 
         resp = client.cancel_order(client.account_hash, order_id)
         assert resp.status_code == 200
@@ -50,7 +46,7 @@ class TestOrderManagement:
     def test_cancel_filled_order(self, client):
         """Test that filled orders cannot be cancelled."""
         client.place_order(client.account_hash, eq.equity_buy_market("TEST", 10))
-        order_id = list(client.orders.keys())[0]
+        order_id = next(iter(client.orders.keys()))
 
         resp = client.cancel_order(client.account_hash, order_id)
         assert resp.status_code == 400
@@ -61,7 +57,7 @@ class TestOrderManagement:
         client.place_order(
             client.account_hash, eq.equity_buy_limit("TEST", 10, current_price * 0.5)
         )
-        order_id = list(client.orders.keys())[0]
+        order_id = next(iter(client.orders.keys()))
 
         new_order = eq.equity_buy_limit("TEST", 20, current_price * 0.6)
         resp = client.replace_order(client.account_hash, order_id, new_order)

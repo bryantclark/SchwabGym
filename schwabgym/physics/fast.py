@@ -10,7 +10,6 @@ License: MIT
 """
 
 import logging
-from typing import Dict
 
 from schwabgym.physics.base import ExecutionEngine
 
@@ -42,7 +41,7 @@ class FastExecutionEngine(ExecutionEngine):
         logger.info(f"FastExecutionEngine initialized (slippage=${base_slippage:.4f})")
 
     def calculate_execution_price(
-        self, base_price: float, quantity: int, instruction: str, market_data: Dict
+        self, base_price: float, quantity: int, instruction: str, market_data: dict
     ) -> float:
         """
         Simple slippage model.

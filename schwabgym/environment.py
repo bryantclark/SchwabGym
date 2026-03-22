@@ -11,7 +11,8 @@ License: MIT
 """
 
 import logging
-from typing import Any, Callable, Dict, Optional, Tuple
+from collections.abc import Callable
+from typing import Any
 
 import gymnasium as gym
 import numpy as np
@@ -29,7 +30,14 @@ class ZScoreNormalizer:
     Useful for normalizing observation vectors in your ObservationBuilder.
     """
 
-    def __init__(self, shape: Tuple[int, ...], clip_range: float = 10.0):
+    def __init__(self, shape: tuple[int, ...], clip_range: float = 10.0):
+        """
+        Initialize normalizer.
+
+        Args:
+            shape (tuple): Shape of observation vectors
+            clip_range (float): Maximum absolute z-score (prevents outliers)
+        """
         self.shape = shape
         self.mean = np.zeros(shape, dtype=np.float32)
         self.var = np.ones(shape, dtype=np.float32)
@@ -70,7 +78,7 @@ class SchwabTradingEnv(gym.Env):
     - Order execution agents (Level 2 data)
     """
 
-    metadata = {"render_modes": ["human"]}
+    metadata = {"render_modes": ["human"]}  # noqa: RUF012
 
     def __init__(
         self,
@@ -80,8 +88,8 @@ class SchwabTradingEnv(gym.Env):
         action_fn: Callable[[MockClient, Any], None],
         observation_space: spaces.Space,
         action_space: spaces.Space,
-        termination_fn: Optional[Callable[[MockClient], bool]] = None,
-        render_mode: Optional[str] = None,
+        termination_fn: Callable[[MockClient], bool] | None = None,
+        render_mode: str | None = None,
     ):
         """
         Initialize the generic environment.
@@ -110,7 +118,19 @@ class SchwabTradingEnv(gym.Env):
         # Helper for tracking resets for stateful wrappers
         self._observation_wrapper_ref = getattr(observation_fn, "__self__", None)
 
-    def reset(self, seed: Optional[int] = None, options: Optional[Dict] = None):
+    def reset(
+        self, seed: int | None = None, options: dict | None = None
+    ) -> tuple[np.ndarray, dict]:
+        """
+        Reset environment to initial state.
+
+        Args:
+            seed (int, optional): Random seed
+            options (dict, optional): Reset options
+
+        Returns:
+            tuple: (initial_observation, info_dict)
+        """
         super().reset(seed=seed)
 
         # 1. Reset Simulator

@@ -7,7 +7,6 @@ Handles market data simulation, time advancement, and price retrieval.
 
 import datetime
 import logging
-from typing import Dict, List, Optional, Union
 
 import pandas as pd
 
@@ -24,7 +23,7 @@ class PriceEngine:
         max_steps (int): Total time steps available.
     """
 
-    def __init__(self, market_data: Union[pd.DataFrame, Dict[str, pd.DataFrame]]):
+    def __init__(self, market_data: pd.DataFrame | dict[str, pd.DataFrame]):
         """
         Initialize the price engine.
 
@@ -88,8 +87,8 @@ class PriceEngine:
 
     def get_current_time(self) -> datetime.datetime:
         """Get current timestamp."""
-        # Assume all aligned to main symbol
-        return self.data[self.main_symbol].index[self.current_step]
+        ts: pd.Timestamp = self.data[self.main_symbol].index[self.current_step]
+        return ts.to_pydatetime()  # type: ignore[no-any-return, return-value]
 
     def get_current_price(self, symbol: str, col: str = "Close") -> float:
         """
@@ -113,9 +112,7 @@ class PriceEngine:
 
         return float(target_df.iloc[self.current_step][col])
 
-    def get_current_ohlcv(
-        self, symbol: Optional[str] = None
-    ) -> Dict[str, Union[float, int]]:
+    def get_current_ohlcv(self, symbol: str | None = None) -> dict[str, float | int]:
         """Get current step's full OHLCV data."""
         sym = symbol or self.main_symbol
         target_df = self.data.get(sym, self.data[self.main_symbol])
@@ -130,7 +127,7 @@ class PriceEngine:
             "Volatility": float(row.get("Volatility", 0.01)),
         }
 
-    def get_quotes_data(self, symbols: List[str]) -> Dict[str, Dict]:
+    def get_quotes_data(self, symbols: list[str]) -> dict[str, dict]:
         """
         Generate quote data for symbols.
 
@@ -189,7 +186,7 @@ class PriceEngine:
             }
         return response_body
 
-    def get_price_history_data(self, symbol: str) -> List[Dict]:
+    def get_price_history_data(self, symbol: str) -> list[dict]:
         """
         Get historical candles up to current step.
 

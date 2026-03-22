@@ -79,7 +79,6 @@ class AlmgrenChrissOptimalExecutor:
             np.ndarray: Shares to trade each period [q_1, q_2, ..., q_N]
         """
         X = total_shares
-        tau = T / N
 
         # Compute urgency parameter kappa
         if self.eta == 0:
@@ -104,7 +103,7 @@ class AlmgrenChrissOptimalExecutor:
 
         logger.debug(
             f"Trajectory computed: X={X}, T={T:.2f}, N={N} "
-            f"→ Front-loaded={trades[0]/X*100:.1f}% in first period"
+            f"→ Front-loaded={trades[0] / X * 100:.1f}% in first period"
         )
 
         # Round trades to nearest integer and adjust to match total_shares
@@ -113,7 +112,7 @@ class AlmgrenChrissOptimalExecutor:
         if diff != 0:
             # Adjust the first trade to compensate the rounding error
             trades_int[0] += diff
-        return trades_int
+        return np.asarray(trades_int)
 
     def estimate_impact_cost(self, trajectory: np.ndarray, volatility: float) -> float:
         """
@@ -143,4 +142,4 @@ class AlmgrenChrissOptimalExecutor:
         total_shares = trajectory.sum()
         impact_bps = (total_impact / total_shares) * 10000
 
-        return impact_bps
+        return float(impact_bps)

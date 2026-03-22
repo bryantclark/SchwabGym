@@ -2,7 +2,6 @@ import asyncio
 import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pandas as pd
 import pytest
 
 from schwabgym.client import MockClient

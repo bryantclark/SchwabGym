@@ -1,33 +1,98 @@
-[tool.black]
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# ── Ruff (replaces black + isort + flake8) ──────────────────────────
+[tool.ruff]
+target-version = "py310"
 line-length = 88
-target-version = ["py310"]
-include = '\.pyi?$'
-exclude = '''
-/(\
-  \.git
-  | \.venv
-  | build
-  | dist
-) /
-'''
+exclude = [".git", ".venv", "build", "dist", "*.egg-info"]
 
-[tool.isort]
-profile = "black"
-line_length = 88
-known_first_party = ["schwabgym"]
-default_section = "THIRDPARTY"
+[tool.ruff.lint]
+select = [
+  "E",     # pycodestyle errors
+  "W",     # pycodestyle warnings
+  "F",     # pyflakes
+  "I",     # isort
+  "UP",    # pyupgrade
+  "B",     # flake8-bugbear
+  "SIM",   # flake8-simplify
+  "RUF",   # ruff-specific rules
+]
+ignore = [
+  "E501",   # line too long (formatter handles this)
+  "SIM108", # ternary operator (readability preference)
+  "RUF001", # ambiguous unicode in strings (Greek letters in physics formulas)
+  "RUF002", # ambiguous unicode in docstrings (× σ α etc.)
+  "RUF022", # unsorted __all__ (we group by category)
+]
 
-[tool.flake8]
-max-line-length = 88
-extend-ignore = ["E203", "W503"]
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["RUF059"]    # unused unpacking in env.step() is idiomatic
+"examples/**" = ["RUF059", "F841"]  # example scripts are illustrative
 
+[tool.ruff.lint.isort]
+known-first-party = ["schwabgym"]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+# ── Mypy ─────────────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false       # gradually adopt
+check_untyped_defs = true
+ignore_missing_imports = true       # third-party stubs may be missing
+show_error_codes = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+# ── Pytest ───────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+  "-ra",                  # show summary of all non-passing tests
+  "--strict-markers",     # error on unknown markers
+  "--tb=short",           # shorter tracebacks
+  "-q",                   # quiet output by default
+]
+markers = [
+  "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
+
+# ── Coverage ─────────────────────────────────────────────────────────
+[tool.coverage.run]
+source = ["schwabgym"]
+omit = ["tests/*", "examples/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+fail_under = 70
+
+# ── Tox ──────────────────────────────────────────────────────────────
 [tool.tox]
-env_list = ["py310", "py311"]
+env_list = ["py310", "py311", "lint", "typecheck"]
 
 [tool.tox.testenv]
-description = "Run linters, pre-commit checks, and tests"
-deps = ["pytest", "pre-commit"]
+description = "Run tests"
+deps = ["pytest", "pytest-cov"]
+commands = ["pytest {posargs}"]
+
+[tool.tox.testenv.lint]
+description = "Run linters and formatters"
+deps = ["ruff"]
 commands = [
-  "pre-commit run --all-files",
-  "pytest -q",
+  "ruff check .",
+  "ruff format --check .",
 ]
+
+[tool.tox.testenv.typecheck]
+description = "Run type checking"
+deps = ["mypy"]
+commands = ["mypy schwabgym"]

@@ -12,7 +12,7 @@ License: MIT
 
 import datetime
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from schwabgym.account import Account
 from schwabgym.order_manager import OrderManager
@@ -39,13 +39,13 @@ class MockClient:
         self,
         market_data_df=None,
         initial_cash: float = 25000.0,
-        execution_engine: Optional[ExecutionEngine] = None,
-        app_key: Optional[str] = None,
-        app_secret: Optional[str] = None,
-        callback_url: Optional[str] = None,
-        token_path: Optional[str] = None,
-        tokens_file: Optional[str] = None,
-        timeout: Optional[int] = None,
+        execution_engine: ExecutionEngine | None = None,
+        app_key: str | None = None,
+        app_secret: str | None = None,
+        callback_url: str | None = None,
+        token_path: str | None = None,
+        tokens_file: str | None = None,
+        timeout: int | None = None,
         verbose: bool = False,
         **kwargs,
     ):
@@ -57,15 +57,13 @@ class MockClient:
             logger.warning(
                 "MockClient received string for market_data_df. Assuming it is app_key."
             )
-            market_data_df = kwargs.get("market_data", None)
+            market_data_df = kwargs.get("market_data")
 
         if market_data_df is None:
             # Check kwargs for 'market_data'
             market_data_df = kwargs.get("market_data")
 
         if market_data_df is None:
-            import pandas as pd
-
             from schwabgym.data import generate_dummy_data
 
             logger.warning("No market data provided. Generating DUMMY data.")
@@ -157,7 +155,7 @@ class MockClient:
 
         return True
 
-    def reset(self, initial_cash: Optional[float] = None) -> None:
+    def reset(self, initial_cash: float | None = None) -> None:
         """Reset simulator."""
         self.price_engine.reset()
         self.account.reset(initial_cash)
@@ -189,9 +187,7 @@ class MockClient:
             {"accountNumber": self.account_number, "hashValue": self.account_hash}
         )
 
-    def get_account(
-        self, account_hash: str, fields: Optional[str] = None
-    ) -> MockResponse:
+    def get_account(self, account_hash: str, fields: str | None = None) -> MockResponse:
         if account_hash != self.account_hash:
             return MockResponse({"error": "Unauthorized"}, 401)
 
@@ -240,7 +236,7 @@ class MockClient:
         )
 
     def get_quotes(
-        self, symbols: Union[str, List[str]], fields: Optional[str] = None
+        self, symbols: str | list[str], fields: str | None = None
     ) -> MockResponse:
         if isinstance(symbols, str):
             symbols = [symbols]
@@ -251,19 +247,19 @@ class MockClient:
     def get_price_history(
         self,
         symbol: str,
-        period_type: Optional[str] = None,
-        period: Optional[int] = None,
-        frequency_type: Optional[str] = None,
-        frequency: Optional[int] = None,
-        start_date: Optional[datetime.datetime] = None,
-        end_date: Optional[datetime.datetime] = None,
-        need_extended_hours_data: Optional[bool] = None,
+        period_type: str | None = None,
+        period: int | None = None,
+        frequency_type: str | None = None,
+        frequency: int | None = None,
+        start_date: datetime.datetime | None = None,
+        end_date: datetime.datetime | None = None,
+        need_extended_hours_data: bool | None = None,
     ) -> MockResponse:
         candles = self.price_engine.get_price_history_data(symbol)
         logger.debug(f"Returned {len(candles)} candles for {symbol}")
         return MockResponse({"candles": candles, "symbol": symbol})
 
-    def place_order(self, account_hash: str, order: Dict[str, Any]) -> MockResponse:
+    def place_order(self, account_hash: str, order: dict[str, Any]) -> MockResponse:
         if account_hash != self.account_hash:
             return MockResponse({"error": "Unauthorized"}, 401)
 
@@ -281,7 +277,7 @@ class MockClient:
         return self.order_manager.cancel_order(order_id)
 
     def replace_order(
-        self, account_hash: str, order_id: int, order_spec: Dict[str, Any]
+        self, account_hash: str, order_id: int, order_spec: dict[str, Any]
     ) -> MockResponse:
         if account_hash != self.account_hash:
             return MockResponse({"error": "Unauthorized"}, 401)
@@ -299,10 +295,10 @@ class MockClient:
     def get_orders_for_account(
         self,
         account_hash: str,
-        from_entered_datetime: Optional[str] = None,
-        to_entered_datetime: Optional[str] = None,
-        status: Optional[str] = None,
-        max_results: Optional[int] = None,
+        from_entered_datetime: str | None = None,
+        to_entered_datetime: str | None = None,
+        status: str | None = None,
+        max_results: int | None = None,
     ) -> MockResponse:
         if account_hash != self.account_hash:
             return MockResponse({"error": "Unauthorized"}, 401)

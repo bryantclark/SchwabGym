@@ -48,7 +48,7 @@ class TestOrderManager:
 
         # Verify filled
         assert len(manager.orders) == 1
-        order_id = list(manager.orders.keys())[0]
+        order_id = next(iter(manager.orders.keys()))
         assert manager.orders[order_id]["status"] == "FILLED"
 
         # Verify account updated
@@ -63,7 +63,7 @@ class TestOrderManager:
 
         # Verify queued
         assert len(manager.working_orders) == 1
-        assert list(manager.orders.values())[0]["status"] == "WORKING"
+        assert next(iter(manager.orders.values()))["status"] == "WORKING"
 
     def test_limit_order_execution(self, components):
         manager, account, prices = components
@@ -77,7 +77,7 @@ class TestOrderManager:
 
         # Verify filled
         assert len(manager.working_orders) == 0
-        assert list(manager.orders.values())[0]["status"] == "FILLED"
+        assert next(iter(manager.orders.values()))["status"] == "FILLED"
         assert account.positions["TEST"]["quantity"] == 10
 
     def test_cancel_order(self, components):
@@ -113,7 +113,7 @@ class TestOrderManager:
         assert resp.status_code == 400
 
         # Verify rejected status
-        order_id = list(manager.orders.keys())[0]
+        order_id = next(iter(manager.orders.keys()))
         # Depending on impl, it might be in orders dict or not if 400 immediately
         # But our impl puts it in orders then returns 400 if execution fails immediately in latency_mode=False
         if order_id in manager.orders:

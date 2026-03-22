@@ -54,7 +54,7 @@ def simple_mean_reversion_strategy():
     logger.info("=" * 60)
     logger.info(f"Symbol: {ticker}")
     logger.info(f"Data points: {len(df)}")
-    logger.info(f"Starting capital: $100,000")
+    logger.info("Starting capital: $100,000")
     logger.info("=" * 60)
 
     trade_count = 0
@@ -152,14 +152,14 @@ def run_multiple_strategies():
 
     # Test different SMA thresholds
     for threshold in [0.01, 0.02, 0.03]:
-        logger.info(f"\nTesting threshold: {threshold*100:.0f}%")
+        logger.info(f"\nTesting threshold: {threshold * 100:.0f}%")
         # You would modify the strategy here to use this threshold
         final_nav, ret = simple_mean_reversion_strategy()
         results.append({"threshold": threshold, "return": ret, "final_nav": final_nav})
 
     # Find best strategy
     best = max(results, key=lambda x: x["return"])
-    logger.info(f"\nBest strategy: {best['threshold']*100:.0f}% threshold")
+    logger.info(f"\nBest strategy: {best['threshold'] * 100:.0f}% threshold")
     logger.info(f"Return: {best['return']:.2f}%")
 
 

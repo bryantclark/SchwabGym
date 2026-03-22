@@ -11,7 +11,6 @@ License: MIT
 
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Dict
 
 
 class PhysicsMode(Enum):
@@ -32,7 +31,7 @@ class ExecutionEngine(ABC):
 
     @abstractmethod
     def calculate_execution_price(
-        self, base_price: float, quantity: int, instruction: str, market_data: Dict
+        self, base_price: float, quantity: int, instruction: str, market_data: dict
     ) -> float:
         """
         Calculate the actual execution price including impact.
