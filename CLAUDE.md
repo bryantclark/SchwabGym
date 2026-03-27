@@ -28,7 +28,6 @@ schwabgym/
   environment.py     # SchwabTradingEnv — Gymnasium wrapper (unopinionated)
   fees.py            # FeeCalculator — SEC Section 31, FINRA TAF
   data.py            # Data loading, cleaning, technical indicators
-  market_calendar.py # Trading sessions, holidays
   streamer.py        # MockStreamer — streaming data simulation
   physics/           # Execution engines
     base.py          #   ExecutionEngine ABC

@@ -154,13 +154,13 @@ def check_dependencies():
         "pandas": "pandas",
         "numpy": "numpy",
         "gymnasium": "gymnasium",
-        "matplotlib": "matplotlib",
     }
 
     optional = {
         "schwab": "schwab-py (for live trading)",
         "stable_baselines3": "stable-baselines3 (for RL)",
         "torch": "torch (for RL)",
+        "matplotlib": "matplotlib (for plotting)",
     }
 
     missing_required = []
@@ -194,12 +194,3 @@ def check_dependencies():
         )
 
     return True
-
-
-# Run dependency check on import
-try:
-    check_dependencies()
-except ImportError as e:
-    import warnings
-
-    warnings.warn(str(e), stacklevel=1)

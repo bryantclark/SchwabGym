@@ -113,13 +113,21 @@ class FeeCalculator:
 
         Args:
             trade_date (datetime.date): Transaction date
-            quantity (int): Shares or contracts
-            price (float): Execution price per share/contract
+            quantity (int): Shares or contracts (must be positive)
+            price (float): Execution price per share/contract (must be non-negative)
             asset_type (str): 'EQUITY' or 'OPTION'
 
         Returns:
             float: Total fees in dollars
+
+        Raises:
+            ValueError: If quantity <= 0 or price < 0
         """
+        if quantity <= 0:
+            raise ValueError(f"Quantity must be positive, got {quantity}")
+        if price < 0:
+            raise ValueError(f"Price must be non-negative, got {price}")
+
         notional_value = quantity * price
 
         # SEC Section 31 fee

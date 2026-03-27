@@ -56,30 +56,34 @@ class HybridExecutionEngine(ExecutionEngine):
         self.fast = fast_engine or FastExecutionEngine()
         self.realistic = realistic_engine or RealisticExecutionEngine()
         self.current_mode: PhysicsMode | None = None
-
-        if seed is not None:
-            np.random.seed(seed)
+        self._active_engine: ExecutionEngine | None = None
+        self._rng = np.random.default_rng(seed)
 
         logger.info(
             f"HybridExecutionEngine initialized "
             f"(realistic_prob={realistic_probability * 100:.0f}%)"
         )
 
-    def _select_engine(self) -> ExecutionEngine:
-        """Randomly select engine based on probability."""
-        if np.random.random() < self.p_realistic:
+    def select_engine_for_step(self) -> None:
+        """Select engine for the current time step. Call once per step."""
+        if self._rng.random() < self.p_realistic:
             self.current_mode = PhysicsMode.REALISTIC
-            return self.realistic
+            self._active_engine = self.realistic
         else:
             self.current_mode = PhysicsMode.FAST
-            return self.fast
+            self._active_engine = self.fast
+
+    def _get_engine(self) -> ExecutionEngine:
+        """Return the active engine, selecting one if needed."""
+        if self._active_engine is None:
+            self.select_engine_for_step()
+        return self._active_engine  # type: ignore[return-value]
 
     def calculate_execution_price(
         self, base_price: float, quantity: int, instruction: str, market_data: dict
     ) -> float:
-        """Delegate to randomly selected engine."""
-        engine = self._select_engine()
-        return engine.calculate_execution_price(
+        """Delegate to the active engine (consistent per step)."""
+        return self._get_engine().calculate_execution_price(
             base_price, quantity, instruction, market_data
         )
 
@@ -91,9 +95,8 @@ class HybridExecutionEngine(ExecutionEngine):
         volume: int,
         quantity: int,
     ) -> bool:
-        """Delegate to randomly selected engine."""
-        engine = self._select_engine()
-        return engine.should_limit_fill(
+        """Delegate to the active engine (consistent per step)."""
+        return self._get_engine().should_limit_fill(
             limit_price, market_high, market_low, volume, quantity
         )
 

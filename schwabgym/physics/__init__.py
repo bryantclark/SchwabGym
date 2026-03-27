@@ -31,29 +31,23 @@ def create_execution_engine(mode: str = "realistic", **kwargs) -> ExecutionEngin
     Factory function for creating execution engines.
 
     Args:
-        mode (str): "fast", "realistic", or "hybrid"
-        **kwargs: Engine-specific parameters
+        mode: One of "fast", "realistic", "hybrid", or "almgren_chriss".
+        **kwargs: Engine-specific parameters.
 
     Returns:
-        ExecutionEngine: Configured engine instance
+        Configured engine instance.
 
     Example:
-        >>> # Fast mode for rapid prototyping
         >>> engine = create_execution_engine("fast")
-
-        >>> # Realistic mode for production (DEFAULT)
         >>> engine = create_execution_engine("realistic", impact_coefficient=0.8)
-
-        >>> # Hybrid mode for robust RL training
         >>> engine = create_execution_engine("hybrid", realistic_probability=0.3)
     """
-    mode = mode.lower()
-
-    if mode == "fast":
-        return FastExecutionEngine(**kwargs)
-    elif mode == "realistic":
-        return RealisticExecutionEngine(**kwargs)
-    elif mode == "hybrid":
-        return HybridExecutionEngine(**kwargs)
-    else:
-        raise ValueError(f"Unknown mode: {mode}. Use 'fast', 'realistic', or 'hybrid'")
+    _engines: dict[str, type[ExecutionEngine]] = {
+        "fast": FastExecutionEngine,
+        "realistic": RealisticExecutionEngine,
+        "hybrid": HybridExecutionEngine,
+    }
+    cls = _engines.get(mode.lower())
+    if cls is None:
+        raise ValueError(f"Unknown mode: {mode}. Use one of: {sorted(_engines.keys())}")
+    return cls(**kwargs)

@@ -17,23 +17,27 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+# --- Synthetic data constants ---
+BASE_SPREAD = 0.01  # Default bid-ask spread ($)
+HIGH_VOL_SPREAD = 0.03  # Spread during high-volatility regimes ($)
+MARKET_OPEN_SPREAD_BUMP = 0.02  # Additional spread at open ($)
+HIGH_VOL_QUANTILE = 0.9  # Threshold for "high volatility"
+DEFAULT_VOLUME = 100_000  # Default volume for missing data
+PARETO_SHAPE = 1.16  # Trade-size distribution (80/20 rule)
+BASE_TRADE_SIZE = 100  # Minimum trade size for Pareto distribution
+
 
 def add_synthetic_quotes(df: pd.DataFrame) -> pd.DataFrame:
     """Generates Bid/Ask prices based on volatility regimes."""
-    # Base spread starts small (e.g., 1 cent)
-    df["Spread"] = 0.01
+    df["Spread"] = BASE_SPREAD
 
-    # Widen spread during high volatility
-    # If volatility > 90th percentile, triple the spread
     if "Volatility" in df.columns:
-        high_vol_mask = df["Volatility"] > df["Volatility"].quantile(0.9)
-        df.loc[high_vol_mask, "Spread"] = 0.03
+        high_vol_mask = df["Volatility"] > df["Volatility"].quantile(HIGH_VOL_QUANTILE)
+        df.loc[high_vol_mask, "Spread"] = HIGH_VOL_SPREAD
 
-    # Widen spread at market open/close (first/last 30 mins)
-    # (Assuming datetime index)
     if isinstance(df.index, pd.DatetimeIndex):
         market_hours = df.index.indexer_between_time("09:30", "10:00")
-        df.iloc[market_hours, df.columns.get_loc("Spread")] += 0.02
+        df.iloc[market_hours, df.columns.get_loc("Spread")] += MARKET_OPEN_SPREAD_BUMP
 
     # Calculate Bid/Ask from Close (or use High/Low for more variance)
     df["BidPrice"] = df["Close"] - (df["Spread"] / 2)
@@ -42,18 +46,19 @@ def add_synthetic_quotes(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def add_liquidity_depth(df: pd.DataFrame) -> pd.DataFrame:
+def add_liquidity_depth(
+    df: pd.DataFrame, rng: np.random.Generator | None = None
+) -> pd.DataFrame:
     """Estimates Bid/Ask sizes based on volume."""
-    # Heuristic: The available size at bid/ask is ~1-5% of the bar's volume
-    # Use random noise so it's not perfectly correlated
-    # Re-seed if needed, or rely on global state.
-    # To vary per call, we might rely on global state changing.
-    liquidity_factor = np.random.uniform(0.01, 0.05, size=len(df))
+    if rng is None:
+        rng = np.random.default_rng()
+
+    liquidity_factor = rng.uniform(0.01, 0.05, size=len(df))
 
     df["BidSize"] = (df["Volume"] * liquidity_factor).astype(int)
     # Make AskSize slightly different to create imbalance signals
     df["AskSize"] = (
-        df["Volume"] * liquidity_factor * np.random.uniform(0.8, 1.2, size=len(df))
+        df["Volume"] * liquidity_factor * rng.uniform(0.8, 1.2, size=len(df))
     ).astype(int)
 
     # Ensure at least 1 share/contract (using 100 as standard lot size base if volume permits, else 1)
@@ -63,13 +68,16 @@ def add_liquidity_depth(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def add_last_trade_size(df: pd.DataFrame) -> pd.DataFrame:
+def add_last_trade_size(
+    df: pd.DataFrame, rng: np.random.Generator | None = None
+) -> pd.DataFrame:
     """Estimates LastSize to simulate trade granularity."""
+    if rng is None:
+        rng = np.random.default_rng()
+
     # Simulate: Most trades are small (100), occasional large blocks
     # Use a Pareto distribution to simulate rare large prints
-    shape = 1.16  # 80/20 rule roughly
-    # Use random state to ensure reproducibility if needed, though np.random is global
-    sizes = (np.random.pareto(shape, len(df)) + 1) * 100
+    sizes = (rng.pareto(PARETO_SHAPE, len(df)) + 1) * BASE_TRADE_SIZE
 
     # Clip to be realistic (cannot exceed bar volume)
     df["LastSize"] = np.minimum(sizes, df["Volume"]).astype(int)
@@ -207,7 +215,7 @@ def load_and_clean_data(filepath: str, symbol: str | None = None) -> pd.DataFram
         logger.warning(f"Missing columns {missing_cols}, filling with 'close' value")
         for col in missing_cols:
             if col == "volume":
-                df[col] = 100000  # Default volume
+                df[col] = DEFAULT_VOLUME
             else:
                 df[col] = df["close"]
 
@@ -257,9 +265,10 @@ def load_and_clean_data(filepath: str, symbol: str | None = None) -> pd.DataFram
         df.loc[df["Volume"] < 0, "Volume"] = 0
 
     # ==================== SYNTHETIC DATA ENRICHMENT ====================
+    _rng = np.random.default_rng()
     df = add_synthetic_quotes(df)
-    df = add_liquidity_depth(df)
-    df = add_last_trade_size(df)
+    df = add_liquidity_depth(df, rng=_rng)
+    df = add_last_trade_size(df, rng=_rng)
     df = mark_data_quality(df)
 
     # ==================== FINAL VALIDATION ====================
@@ -279,8 +288,9 @@ def load_and_clean_data(filepath: str, symbol: str | None = None) -> pd.DataFram
         "LastSize",
         "DataValid",
     ]
-    if not all(col in df.columns for col in required_final):
-        pass
+    missing_final = [col for col in required_final if col not in df.columns]
+    if missing_final:
+        logger.warning(f"Missing expected columns after processing: {missing_final}")
 
     logger.info(f"Data cleaning complete. Shape: {df.shape}")
     logger.info(f"Columns: {list(df.columns)}")
@@ -319,24 +329,23 @@ def generate_dummy_data(
     """
     logger.info(f"Generating {periods} periods of dummy data for {symbol}")
 
-    if seed is not None:
-        np.random.seed(seed)
+    rng = np.random.default_rng(seed)
 
     # Generate timestamps
     dates = pd.date_range(start="2023-01-01 09:30:00", periods=periods, freq=freq)
 
     # Generate price path using geometric Brownian motion
-    returns = np.random.normal(0, volatility, periods)
+    returns = rng.normal(0, volatility, periods)
     price_path = start_price * np.exp(np.cumsum(returns))
 
     # Add intraday volatility
-    intraday_vol = np.random.uniform(0.002, 0.008, periods)
+    intraday_vol = rng.uniform(0.002, 0.008, periods)
 
     # Generate OHLC
     opens = price_path
     highs = price_path * (1 + intraday_vol)
     lows = price_path * (1 - intraday_vol)
-    closes = price_path * (1 + np.random.normal(0, volatility / 2, periods))
+    closes = price_path * (1 + rng.normal(0, volatility / 2, periods))
 
     # Ensure OHLC consistency (High >= Close >= Low, etc.)
     for i in range(periods):
@@ -347,8 +356,7 @@ def generate_dummy_data(
         lows[i] = min(low, lows[i])
 
     # Generate volume (random with trend)
-    base_volume = 100000
-    volume = np.random.poisson(base_volume, periods)
+    volume = rng.poisson(DEFAULT_VOLUME, periods)
 
     # Create dataframe
     df = pd.DataFrame(
@@ -366,8 +374,8 @@ def generate_dummy_data(
 
     # Enrich dummy data too
     df = add_synthetic_quotes(df)
-    df = add_liquidity_depth(df)
-    df = add_last_trade_size(df)
+    df = add_liquidity_depth(df, rng=rng)
+    df = add_last_trade_size(df, rng=rng)
     df = mark_data_quality(df)
 
     logger.info(f"Generated dummy data: {df.shape[0]} rows")
@@ -472,7 +480,7 @@ def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     delta = df["AdjClose"].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-    rs = gain / loss
+    rs = gain / loss.replace(0, 1e-10)
     df["RSI"] = 100 - (100 / (1 + rs))
 
     # Bollinger Bands

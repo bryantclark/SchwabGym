@@ -40,6 +40,10 @@ class FastExecutionEngine(ExecutionEngine):
         self.base_slippage = base_slippage
         logger.info(f"FastExecutionEngine initialized (slippage=${base_slippage:.4f})")
 
+    _BUY_INSTRUCTIONS = frozenset(
+        {"BUY", "BUY_TO_COVER", "BUY_TO_OPEN", "BUY_TO_CLOSE"}
+    )
+
     def calculate_execution_price(
         self, base_price: float, quantity: int, instruction: str, market_data: dict
     ) -> float:
@@ -49,10 +53,9 @@ class FastExecutionEngine(ExecutionEngine):
         Buy orders: base_price + slippage
         Sell orders: base_price - slippage
         """
-        if instruction in ["BUY", "BUY_TO_COVER", "BUY_TO_OPEN"]:
+        if instruction in self._BUY_INSTRUCTIONS:
             return base_price + self.base_slippage
-        else:
-            return base_price - self.base_slippage
+        return base_price - self.base_slippage
 
     def should_limit_fill(
         self,

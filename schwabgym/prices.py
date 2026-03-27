@@ -90,34 +90,30 @@ class PriceEngine:
         ts: pd.Timestamp = self.data[self.main_symbol].index[self.current_step]
         return ts.to_pydatetime()  # type: ignore[no-any-return, return-value]
 
-    def get_current_price(self, symbol: str, col: str = "Close") -> float:
-        """
-        Get current price for a symbol.
-        """
-        # If symbol not found, try main symbol or error?
-        # schwab-py would error or return empty.
-        # Here we try to find the symbol, if not fall back to main (for single asset mode)
-        # or raise error if in strict multi-asset mode.
+    def _resolve_dataframe(self, symbol: str) -> pd.DataFrame:
+        """Resolve a symbol to its DataFrame.
 
+        In single-asset mode, any symbol maps to the loaded data.
+        In multi-asset mode, unknown symbols raise KeyError.
+        """
         target_df = self.data.get(symbol)
-        if target_df is None:
-            # Fallback for single-asset mode
-            if len(self.data) == 1:
-                target_df = self.data[self.main_symbol]
-            else:
-                logger.warning(
-                    f"Symbol {symbol} not in market data. Using {self.main_symbol}."
-                )
-                target_df = self.data[self.main_symbol]
+        if target_df is not None:
+            return target_df
+        if len(self.data) == 1:
+            return self.data[self.main_symbol]
+        raise KeyError(
+            f"Symbol '{symbol}' not in market data. Available: {list(self.data.keys())}"
+        )
 
-        return float(target_df.iloc[self.current_step][col])
+    def get_current_price(self, symbol: str, col: str = "Close") -> float:
+        """Get current price for a symbol."""
+        return float(self._resolve_dataframe(symbol).iloc[self.current_step][col])
 
     def get_current_ohlcv(self, symbol: str | None = None) -> dict[str, float | int]:
         """Get current step's full OHLCV data."""
-        sym = symbol or self.main_symbol
-        target_df = self.data.get(sym, self.data[self.main_symbol])
-
-        row = target_df.iloc[self.current_step]
+        row = self._resolve_dataframe(symbol or self.main_symbol).iloc[
+            self.current_step
+        ]
         return {
             "Open": float(row["Open"]),
             "High": float(row["High"]),
@@ -141,14 +137,10 @@ class PriceEngine:
         ts_ms = int(self.get_current_time().timestamp() * 1000)
 
         for sym in symbols:
-            # Locate correct DF
-            df = self.data.get(sym)
-            if df is None:
-                if len(self.data) == 1:
-                    df = self.data[self.main_symbol]
-                else:
-                    # Skip unknown symbols
-                    continue
+            try:
+                df = self._resolve_dataframe(sym)
+            except KeyError:
+                continue  # Skip unknown symbols in multi-asset mode
 
             row = df.iloc[self.current_step]
             price = float(row["Close"])
@@ -197,14 +189,7 @@ class PriceEngine:
             List[Dict]: List of candle dicts.
         """
         LOOKBACK = 50
-
-        target_df = self.data.get(symbol)
-        if target_df is None:
-            if len(self.data) == 1:
-                target_df = self.data[self.main_symbol]
-            else:
-                return []
-
+        target_df = self._resolve_dataframe(symbol)
         start_idx = max(0, self.current_step - LOOKBACK + 1)
         col_close = "AdjClose" if "AdjClose" in target_df.columns else "Close"
 

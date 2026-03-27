@@ -2,6 +2,69 @@
 requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+# ── Project metadata ────────────────────────────────────────────────
+[project]
+name = "schwabgym"
+version = "1.0.0"
+description = "High-fidelity RL environment for training algorithmic trading agents on the Charles Schwab platform"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "Bryant Clark" }]
+keywords = [
+  "algorithmic trading",
+  "reinforcement learning",
+  "schwab api",
+  "trading simulator",
+  "market microstructure",
+  "gymnasium",
+  "quantitative finance",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Financial and Insurance Industry",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Office/Business :: Financial :: Investment",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+  "pandas>=2.0.0",
+  "numpy>=1.24.0",
+  "gymnasium>=0.29.0",
+  "scipy>=1.11.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.4.0",
+  "pytest-cov>=4.1.0",
+  "ruff>=0.4.0",
+  "mypy>=1.5.0",
+]
+rl = [
+  "stable-baselines3>=2.0.0",
+  "torch>=2.0.0",
+]
+live = [
+  "schwab-py>=1.5.0",
+]
+plot = [
+  "matplotlib>=3.7.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/bryantclark/SchwabGym"
+Repository = "https://github.com/bryantclark/SchwabGym"
+"Bug Tracker" = "https://github.com/bryantclark/SchwabGym/issues"
+
+[tool.setuptools.packages.find]
+exclude = ["tests*", "examples*", "docs*"]
+
 # ── Ruff (replaces black + isort + flake8) ──────────────────────────
 [tool.ruff]
 target-version = "py310"

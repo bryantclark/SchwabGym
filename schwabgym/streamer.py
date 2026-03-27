@@ -19,10 +19,10 @@ class MockStreamer:
     Streams Level 1 data from the simulator's PriceEngine.
     """
 
-    def __init__(self, client, queue_size=100):
+    def __init__(self, client):
         self.client = client
         self.listening = False
-        self.subscriptions = {}  # store active subscriptions
+        self.subscriptions: dict[str, list[str]] = {}
 
     async def start(self, receiver: Callable):
         """
@@ -86,15 +86,12 @@ class MockStreamer:
             # Yield control to allow other tasks to run
             await asyncio.sleep(0.001)
 
-    def send(self, requests):
+    def send(self, requests) -> None:
         """
-        Handle subscription requests (ADD, SUBS, UNSS).
+        Handle subscription requests (ADD, SUBS, UNSUBS).
 
         Mimics streamer.send(requests).
         """
-        # TODO: Implement full request parsing
-        pass
-
         # If requests is a list of requests
         if not isinstance(requests, list):
             requests = [requests]
@@ -109,16 +106,22 @@ class MockStreamer:
                 logger.warning(f"Invalid stream request: {req}")
                 continue
 
-            if command == "SUBS" or command == "ADD":
+            if command in ("SUBS", "ADD"):
                 keys = params.get("keys", "")
                 symbols = keys.split(",") if isinstance(keys, str) else keys
 
                 logger.info(f"Streamer subscribing to {service}: {symbols}")
-                self.subscriptions[service] = symbols
+                if command == "ADD" and service in self.subscriptions:
+                    existing = set(self.subscriptions[service])
+                    existing.update(symbols)
+                    self.subscriptions[service] = list(existing)
+                else:
+                    self.subscriptions[service] = symbols
 
-            elif command == "UNSS":
+            elif command in ("UNSUBS", "UNSS"):
                 if service in self.subscriptions:
                     del self.subscriptions[service]
 
-    def stop(self):
+    def stop(self) -> None:
+        """Stop the streaming loop."""
         self.listening = False

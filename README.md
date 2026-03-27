@@ -3,7 +3,6 @@
 A simulated trading environment compatible with the Charles Schwab Trader API (via `schwab-py`).
 
 [![CI](https://github.com/bryantclark/SchwabGym/actions/workflows/ci.yml/badge.svg)](https://github.com/bryantclark/SchwabGym/actions/workflows/ci.yml)
-[![PyPI](https://badge.fury.io/py/schwabgym.svg)](https://badge.fury.io/py/schwabgym)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Overview
@@ -16,13 +15,21 @@ By adhering to the `schwab-py` API signature, switching from simulation to live 
 
 ```
 schwabgym/
-├── client.py                 # Simulator core, mimics schwab.client.Client
-├── orders.py                 # Order builders, mimics schwab.orders.equities
-├── fees.py                   # Regulatory fee calculations (SEC Section 31, FINRA TAF)
-├── physics/                  # Market microstructure simulation
-│   ├── realistic.py          # Impact model (Square Root Law) and limit order logic
-│   └── fast.py               # Simplified execution for rapid prototyping
-└── environment.py            # Gymnasium-compatible RL environment wrapper
+├── client.py            # MockClient — main entry, delegates to components
+├── orders.py            # MockEquities/MockResponse — order builders, API response
+├── fees.py              # FeeCalculator — SEC Section 31, FINRA TAF
+├── account.py           # Account — positions, cash, PDT, margin
+├── order_manager.py     # OrderManager — order lifecycle (place/cancel/replace)
+├── prices.py            # PriceEngine — market data replay, time advancement
+├── data.py              # Data loading, cleaning, technical indicators
+├── streamer.py          # MockStreamer — streaming data simulation
+├── environment.py       # SchwabTradingEnv — Gymnasium wrapper (unopinionated)
+└── physics/             # Execution engines
+    ├── base.py          #   ExecutionEngine ABC
+    ├── fast.py          #   FastExecutionEngine — instant fills
+    ├── realistic.py     #   RealisticExecutionEngine — Square Root Law (default)
+    ├── hybrid.py        #   HybridExecutionEngine — probabilistic switching
+    └── almgren_chriss.py#   AlmgrenChrissOptimalExecutor
 ```
 
 ## Comparison with `schwab-py`
@@ -42,17 +49,21 @@ SchwabGym provides mock implementations of key `schwab-py` classes.
 The `MockClient` supports the following methods with signatures matching `schwab-py`:
 
 - `get_account_numbers()`
-- `get_account(account_hash)`
+- `get_account(account_hash, fields=None)`
 - `get_quotes(symbols)`
 - `get_price_history(symbol, ...)`
 - `place_order(account_hash, order)`
+- `cancel_order(account_hash, order_id)`
+- `replace_order(account_hash, order_id, order_spec)`
+- `get_order(account_hash, order_id)`
+- `get_orders_for_account(account_hash, ...)`
 
 ## Regulatory and Market Simulation
 
 The simulator attempts to replicate specific constraints of the US equity market:
 
 1.  **Regulatory Fees**:
-    *   **SEC Section 31**: Calculated based on transaction value. Includes logic for the scheduled rate change in May 2025.
+    *   **SEC Section 31**: Calculated based on transaction value.
     *   **FINRA TAF**: Calculated per share/contract with applicable caps.
 
 2.  **Pattern Day Trading (PDT)**:
@@ -71,6 +82,15 @@ The simulator attempts to replicate specific constraints of the US equity market
 pip install schwabgym
 ```
 
+Optional extras:
+
+```bash
+pip install schwabgym[rl]      # stable-baselines3 + torch
+pip install schwabgym[live]    # schwab-py for live trading
+pip install schwabgym[plot]    # matplotlib
+pip install schwabgym[dev]     # pytest, ruff, mypy
+```
+
 ## Usage Example
 
 ### Simulation
@@ -84,12 +104,12 @@ df = load_and_clean_data('AAPL_5min.csv')
 
 # Initialize simulator
 client = MockClient(df, initial_cash=25000)
-account_hash = client.account_linked().json()['hashValue']
+account_hash = client.get_account_numbers().json()['hashValue']
 
 # Trading loop
 while client.advance_time():
     # Get quote
-    quote = client.quote('AAPL')
+    quote = client.get_quotes('AAPL')
     price = quote.json()['AAPL']['quote']['lastPrice']
 
     # Place order

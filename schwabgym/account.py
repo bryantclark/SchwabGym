@@ -21,8 +21,9 @@ class Account:
 
     Attributes:
         cash (float): Current cash balance.
-        positions (Dict): Open positions.
-        day_trades (deque): Rolling window of day trades.
+        positions (dict): Open positions {symbol: {quantity, avgPrice, assetType}}.
+        day_trades (deque): Rolling window of day trade dates.
+        is_pdt_flagged (bool): Whether PDT restriction is active.
     """
 
     # Regulatory Constants
@@ -31,6 +32,13 @@ class Account:
     PDT_LOOKBACK_DAYS = 5
     INITIAL_MARGIN_RATIO = 0.50
     MAINTENANCE_MARGIN_RATIO = 0.30
+
+    # Valid instructions for validation
+    BUY_INSTRUCTIONS = frozenset({"BUY", "BUY_TO_COVER", "BUY_TO_OPEN", "BUY_TO_CLOSE"})
+    SELL_INSTRUCTIONS = frozenset(
+        {"SELL", "SELL_SHORT", "SELL_TO_CLOSE", "SELL_TO_OPEN"}
+    )
+    ALL_INSTRUCTIONS = BUY_INSTRUCTIONS | SELL_INSTRUCTIONS
 
     def __init__(self, initial_cash: float = 25000.0, account_number: str = "12345678"):
         """
@@ -45,12 +53,10 @@ class Account:
         self.account_number = account_number
 
         # State
-        self.positions: dict[
-            str, dict[str, Any]
-        ] = {}  # {symbol: {quantity, avgPrice, assetType}}
-        self.day_trades: deque = deque()
-        self.opened_positions_today: set = set()
-        self._is_pdt_flagged = False
+        self.positions: dict[str, dict[str, Any]] = {}
+        self.day_trades: deque[datetime.date] = deque()
+        self.opened_positions_today: set[str] = set()
+        self.is_pdt_flagged = False
 
         self.fee_calculator = FeeCalculator()
 
@@ -64,7 +70,7 @@ class Account:
         self.positions.clear()
         self.day_trades.clear()
         self.opened_positions_today.clear()
-        self._is_pdt_flagged = False
+        self.is_pdt_flagged = False
 
     def on_new_day(self) -> None:
         """Called when simulation date changes."""
@@ -135,7 +141,7 @@ class Account:
                 day_trade_count >= self.PDT_DAY_TRADE_LIMIT
                 and current_equity < self.PDT_MIN_EQUITY
             ):
-                self._is_pdt_flagged = True
+                self.is_pdt_flagged = True
                 raise ValueError(
                     f"403 Forbidden: Pattern Day Trader Restriction. "
                     f"Account equity ${current_equity:,.2f} < ${self.PDT_MIN_EQUITY:,.2f} "
@@ -156,8 +162,24 @@ class Account:
         Update account state for a trade execution.
 
         Args:
+            symbol: Ticker symbol.
+            quantity: Number of shares/contracts.
+            price: Execution price per unit.
+            instruction: One of BUY, SELL, SELL_SHORT, BUY_TO_COVER, etc.
+            asset_type: EQUITY or OPTION.
+            trade_date: Date of the trade.
             buying_power_check: Available buying power to validate against.
+
+        Raises:
+            ValueError: If instruction is invalid, buying power insufficient,
+                or position unavailable.
         """
+        if instruction not in self.ALL_INSTRUCTIONS:
+            raise ValueError(
+                f"Unknown instruction '{instruction}'. "
+                f"Must be one of: {sorted(self.ALL_INSTRUCTIONS)}"
+            )
+
         total_cost = price * quantity
 
         # Calculate fees
@@ -183,7 +205,7 @@ class Account:
         curr_qty = curr_pos["quantity"]
 
         # Validate & Update
-        if instruction in ["BUY", "BUY_TO_COVER", "BUY_TO_OPEN"]:
+        if instruction in self.BUY_INSTRUCTIONS:
             if total_cost > buying_power_check:
                 raise ValueError(
                     f"Insufficient Buying Power: Required {total_cost}, Available {buying_power_check}"
@@ -200,7 +222,7 @@ class Account:
                 # Covering short
                 curr_pos["quantity"] += quantity
 
-        elif instruction in ["SELL", "SELL_SHORT", "SELL_TO_CLOSE", "SELL_TO_OPEN"]:
+        elif instruction in self.SELL_INSTRUCTIONS:
             if instruction in ["SELL", "SELL_TO_CLOSE"] and curr_qty < quantity:
                 raise ValueError(
                     f"Position not available: Required {quantity}, Available {curr_qty}"

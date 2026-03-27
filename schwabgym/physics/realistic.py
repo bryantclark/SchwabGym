@@ -34,6 +34,7 @@ class RealisticExecutionEngine(ExecutionEngine):
         impact_coefficient: float = 0.7,
         participation_rate: float = 0.10,
         queue_depth_factor: float = 2.0,
+        seed: int | None = None,
     ):
         """
         Initialize realistic execution engine.
@@ -45,10 +46,12 @@ class RealisticExecutionEngine(ExecutionEngine):
                 - 1.0: Illiquid small-cap stocks
             participation_rate (float): Max fraction of volume (default: 10%)
             queue_depth_factor (float): Estimated orders ahead (default: 2.0)
+            seed (int, optional): Random seed for reproducibility
         """
         self.Y = impact_coefficient
         self.alpha = participation_rate
         self.beta = queue_depth_factor
+        self._rng = np.random.default_rng(seed)
         logger.info(
             f"RealisticExecutionEngine initialized "
             f"(Y={impact_coefficient:.2f}, α={participation_rate:.2f})"
@@ -127,7 +130,7 @@ class RealisticExecutionEngine(ExecutionEngine):
         fill_probability = min(1.0, available_liquidity / required_liquidity)
 
         # Stochastic fill decision
-        filled = np.random.random() < fill_probability
+        filled = self._rng.random() < fill_probability
 
         if not filled:
             logger.debug(
@@ -165,7 +168,7 @@ class RealisticExecutionEngine(ExecutionEngine):
         """
         # Generate standard Brownian bridge
         t = np.linspace(0, 1, n_ticks)
-        W = np.random.randn(n_ticks).cumsum() * np.sqrt(1 / n_ticks)
+        W = self._rng.standard_normal(n_ticks).cumsum() * np.sqrt(1 / n_ticks)
 
         # Bridge formula: B(t) = W(t) - t*W(1)
         bridge = W - t * W[-1]

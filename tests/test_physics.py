@@ -209,6 +209,7 @@ class TestHybridExecutionEngine:
         n_trials = 1000
 
         for _ in range(n_trials):
+            engine.select_engine_for_step()
             engine.calculate_execution_price(
                 base_price=100.0,
                 quantity=100,

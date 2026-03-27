@@ -192,20 +192,28 @@ class MockEquities:
         return MockEquities._base_order(symbol, quantity, "SELL", "LIMIT", price=price)
 
     @staticmethod
+    def equity_sell_short_limit(
+        symbol: str, quantity: int, price: float
+    ) -> dict[str, Any]:
+        """Limit short sell order."""
+        return MockEquities._base_order(
+            symbol, quantity, "SELL_SHORT", "LIMIT", price=price
+        )
+
+    @staticmethod
+    def equity_buy_to_cover_limit(
+        symbol: str, quantity: int, price: float
+    ) -> dict[str, Any]:
+        """Limit buy to cover (close short position)."""
+        return MockEquities._base_order(
+            symbol, quantity, "BUY_TO_COVER", "LIMIT", price=price
+        )
+
+    @staticmethod
     def equity_buy_stop(
         symbol: str, quantity: int, stop_price: float
     ) -> dict[str, Any]:
-        """
-        Stop buy order (buy when price rises above stop).
-
-        Args:
-            symbol (str): Ticker symbol
-            quantity (int): Number of shares
-            stop_price (float): Stop trigger price
-
-        Returns:
-            dict: Order specification
-        """
+        """Stop buy order (buy when price rises above stop)."""
         return MockEquities._base_order(
             symbol, quantity, "BUY", "STOP", stop_price=stop_price
         )
@@ -214,19 +222,27 @@ class MockEquities:
     def equity_sell_stop(
         symbol: str, quantity: int, stop_price: float
     ) -> dict[str, Any]:
-        """
-        Stop sell order (sell when price falls below stop).
-
-        Args:
-            symbol (str): Ticker symbol
-            quantity (int): Number of shares
-            stop_price (float): Stop trigger price
-
-        Returns:
-            dict: Order specification
-        """
+        """Stop sell order (sell when price falls below stop)."""
         return MockEquities._base_order(
             symbol, quantity, "SELL", "STOP", stop_price=stop_price
+        )
+
+    @staticmethod
+    def equity_buy_stop_limit(
+        symbol: str, quantity: int, price: float, stop_price: float
+    ) -> dict[str, Any]:
+        """Stop-limit buy order."""
+        return MockEquities._base_order(
+            symbol, quantity, "BUY", "STOP_LIMIT", price=price, stop_price=stop_price
+        )
+
+    @staticmethod
+    def equity_sell_stop_limit(
+        symbol: str, quantity: int, price: float, stop_price: float
+    ) -> dict[str, Any]:
+        """Stop-limit sell order."""
+        return MockEquities._base_order(
+            symbol, quantity, "SELL", "STOP_LIMIT", price=price, stop_price=stop_price
         )
 
 
@@ -314,28 +330,45 @@ class MockOptions:
 
     @staticmethod
     def option_buy_to_close_market(symbol: str, quantity: int) -> dict[str, Any]:
-        """
-        Buy to close option position (close short).
-
-        Args:
-            symbol (str): Option symbol
-            quantity (int): Number of contracts
-
-        Returns:
-            dict: Order specification
-        """
+        """Buy to close option position (close short)."""
         return MockOptions._base_option_order(
             symbol, quantity, "BUY_TO_CLOSE", "MARKET"
         )
 
+    # --- Limit order variants ---
 
-# Compatibility: Try to import real schwab-py, fall back to mocks
-try:
-    from schwab.orders import equities, options
+    @staticmethod
+    def option_buy_to_open_limit(
+        symbol: str, quantity: int, price: float
+    ) -> dict[str, Any]:
+        """Limit buy to open option position."""
+        return MockOptions._base_option_order(
+            symbol, quantity, "BUY_TO_OPEN", "LIMIT", price=price
+        )
 
-    # If schwab-py is installed, prefer it (for live trading)
-    pass
-except ImportError:
-    # schwab-py not installed, use mocks
-    equities = MockEquities
-    options = MockOptions
+    @staticmethod
+    def option_sell_to_close_limit(
+        symbol: str, quantity: int, price: float
+    ) -> dict[str, Any]:
+        """Limit sell to close option position."""
+        return MockOptions._base_option_order(
+            symbol, quantity, "SELL_TO_CLOSE", "LIMIT", price=price
+        )
+
+    @staticmethod
+    def option_sell_to_open_limit(
+        symbol: str, quantity: int, price: float
+    ) -> dict[str, Any]:
+        """Limit sell to open option position (write options)."""
+        return MockOptions._base_option_order(
+            symbol, quantity, "SELL_TO_OPEN", "LIMIT", price=price
+        )
+
+    @staticmethod
+    def option_buy_to_close_limit(
+        symbol: str, quantity: int, price: float
+    ) -> dict[str, Any]:
+        """Limit buy to close option position."""
+        return MockOptions._base_option_order(
+            symbol, quantity, "BUY_TO_CLOSE", "LIMIT", price=price
+        )

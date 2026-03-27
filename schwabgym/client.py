@@ -11,6 +11,7 @@ License: MIT
 """
 
 import datetime
+import hashlib
 import logging
 from typing import Any
 
@@ -40,6 +41,7 @@ class MockClient:
         market_data_df=None,
         initial_cash: float = 25000.0,
         execution_engine: ExecutionEngine | None = None,
+        # schwab-py compat params (accepted but unused in simulation)
         app_key: str | None = None,
         app_secret: str | None = None,
         callback_url: str | None = None,
@@ -51,6 +53,19 @@ class MockClient:
     ):
         """
         Initialize the MockClient.
+
+        Args:
+            market_data_df: Historical OHLCV data (DataFrame or dict of DataFrames).
+            initial_cash: Starting account balance.
+            execution_engine: Physics engine for order execution.
+            app_key: Ignored (schwab-py signature compatibility).
+            app_secret: Ignored (schwab-py signature compatibility).
+            callback_url: Ignored (schwab-py signature compatibility).
+            token_path: Ignored (schwab-py signature compatibility).
+            tokens_file: Ignored (schwab-py signature compatibility).
+            timeout: Ignored (schwab-py signature compatibility).
+            verbose: Ignored (schwab-py signature compatibility).
+            **kwargs: Additional options (latency_mode, market_data).
         """
         # Handle case where app_key is passed positionally as the first argument
         if isinstance(market_data_df, str):
@@ -80,7 +95,6 @@ class MockClient:
         self.execution_engine = execution_engine
 
         # Default to latency mode unless explicitly disabled
-        latency_mode = kwargs.get("latency_mode", True)
         latency_mode = kwargs.get("latency_mode", True)
 
         self.order_manager = OrderManager(
@@ -131,7 +145,7 @@ class MockClient:
 
     @property
     def account_hash(self):
-        return "HASH_1234"
+        return hashlib.sha256(self.account_number.encode()).hexdigest()[:12].upper()
 
     @property
     def account_number(self):
@@ -221,7 +235,7 @@ class MockClient:
                     "type": "MARGIN",
                     "accountNumber": self.account_number,
                     "roundTrips": len(self.account.day_trades),
-                    "isDayTrader": self.account._is_pdt_flagged,
+                    "isDayTrader": self.account.is_pdt_flagged,
                     "currentBalances": {
                         "liquidationValue": equity,
                         "cashBalance": self.cash,
@@ -234,6 +248,16 @@ class MockClient:
                 }
             }
         )
+
+    def get_accounts(self, fields: str | None = None) -> MockResponse:
+        """Get all linked accounts (schwab-py parity: only one simulated account)."""
+        account_resp = self.get_account(self.account_hash, fields=fields)
+        return MockResponse([account_resp.json()])
+
+    def get_quote(self, symbol: str, fields: str | None = None) -> MockResponse:
+        """Get quote for a single symbol."""
+        data = self.price_engine.get_quotes_data([symbol])
+        return MockResponse(data)
 
     def get_quotes(
         self, symbols: str | list[str], fields: str | None = None
@@ -264,7 +288,7 @@ class MockClient:
             return MockResponse({"error": "Unauthorized"}, 401)
 
         # Check for Pattern Day Trader restriction
-        if self.account._is_pdt_flagged:
+        if self.account.is_pdt_flagged:
             return MockResponse(
                 {"error": "Order Rejected: Pattern Day Trader Restriction"}, 403
             )
@@ -314,6 +338,78 @@ class MockClient:
             result_orders = result_orders[-max_results:]
 
         return MockResponse(result_orders)
+
+    def get_orders_for_all_linked_accounts(
+        self,
+        from_entered_datetime: str | None = None,
+        to_entered_datetime: str | None = None,
+        status: str | None = None,
+        max_results: int | None = None,
+    ) -> MockResponse:
+        """Get orders across all linked accounts (single account in sim)."""
+        return self.get_orders_for_account(
+            self.account_hash,
+            from_entered_datetime=from_entered_datetime,
+            to_entered_datetime=to_entered_datetime,
+            status=status,
+            max_results=max_results,
+        )
+
+    def get_transactions(
+        self,
+        account_hash: str,
+        start_date: datetime.datetime | None = None,
+        end_date: datetime.datetime | None = None,
+        transaction_types: str | None = None,
+        symbol: str | None = None,
+    ) -> MockResponse:
+        """Get transaction history (stub — returns filled orders as transactions)."""
+        if account_hash != self.account_hash:
+            return MockResponse({"error": "Unauthorized"}, 401)
+
+        filled = [o for o in self.orders.values() if o["status"] == "FILLED"]
+        return MockResponse(filled)
+
+    def get_user_preferences(self) -> MockResponse:
+        """Get user preferences (simulated)."""
+        return MockResponse(
+            {
+                "accounts": [
+                    {
+                        "accountNumber": self.account_number,
+                        "primaryAccount": True,
+                        "type": "MARGIN",
+                    }
+                ],
+                "streamerInfo": [
+                    {
+                        "streamerSocketUrl": "wss://simulated.schwabgym.local/ws",
+                        "schwabClientCustomerId": "SIM_CUSTOMER",
+                        "schwabClientCorrelId": "SIM_CORREL",
+                    }
+                ],
+            }
+        )
+
+    def get_price_history_every_minute(self, symbol: str, **kwargs) -> MockResponse:
+        """Convenience wrapper — returns same data (sim has single frequency)."""
+        return self.get_price_history(symbol, **kwargs)
+
+    def get_price_history_every_five_minutes(
+        self, symbol: str, **kwargs
+    ) -> MockResponse:
+        """Convenience wrapper — returns same data (sim has single frequency)."""
+        return self.get_price_history(symbol, **kwargs)
+
+    def get_price_history_every_fifteen_minutes(
+        self, symbol: str, **kwargs
+    ) -> MockResponse:
+        """Convenience wrapper — returns same data (sim has single frequency)."""
+        return self.get_price_history(symbol, **kwargs)
+
+    def get_price_history_every_day(self, symbol: str, **kwargs) -> MockResponse:
+        """Convenience wrapper — returns same data (sim has single frequency)."""
+        return self.get_price_history(symbol, **kwargs)
 
 
 # Backward compatibility alias

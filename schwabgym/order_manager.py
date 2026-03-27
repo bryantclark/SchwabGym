@@ -16,17 +16,22 @@ from schwabgym.prices import PriceEngine
 logger = logging.getLogger(__name__)
 
 
+_SUPPORTED_ORDER_TYPES = frozenset({"MARKET", "LIMIT", "STOP", "STOP_LIMIT"})
+_QUEUED_ORDER_TYPES = frozenset({"LIMIT", "STOP", "STOP_LIMIT"})
+_TERMINAL_STATUSES = frozenset({"FILLED", "CANCELED", "REJECTED", "EXPIRED"})
+
+
 class OrderManager:
     """
     Manages the order book and execution logic.
 
     Attributes:
-        account (Account): Reference to the account.
-        price_engine (PriceEngine): Reference to market data.
-        execution_engine (ExecutionEngine): Reference to physics engine.
-        orders (Dict): Order history {orderId: order_dict}.
-        working_orders (List): Active limit/stop orders.
-        pending_orders (List): Orders delayed by simulated latency.
+        account: Reference to the account.
+        price_engine: Reference to market data.
+        execution_engine: Reference to physics engine.
+        orders: Order history {orderId: order_dict}.
+        working_orders: Active limit/stop orders awaiting fill.
+        pending_orders: Orders delayed by simulated latency.
     """
 
     def __init__(
@@ -61,10 +66,27 @@ class OrderManager:
         """
         Validate and place an order.
 
+        Args:
+            order: Order specification dict (from MockEquities/MockOptions builders).
+
         Returns:
-            MockResponse
+            MockResponse with 201 on success, 400 on rejection.
         """
-        # Assign ID
+        order_type = order.get("orderType", "MARKET")
+        if order_type not in _SUPPORTED_ORDER_TYPES:
+            return MockResponse({"error": f"Unsupported order type: {order_type}"}, 400)
+
+        # Validate required price fields
+        if order_type in ("LIMIT", "STOP_LIMIT") and "price" not in order:
+            return MockResponse(
+                {"error": "LIMIT/STOP_LIMIT orders require 'price'"}, 400
+            )
+        if order_type in ("STOP", "STOP_LIMIT") and "stopPrice" not in order:
+            return MockResponse(
+                {"error": "STOP/STOP_LIMIT orders require 'stopPrice'"}, 400
+            )
+
+        # Assign ID and metadata
         order_id = self.next_order_id
         self.next_order_id += 1
 
@@ -78,25 +100,19 @@ class OrderManager:
         self.orders[order_id] = order
 
         if not self.latency_mode:
-            # Execute/Process immediately (Legacy Mode)
-            order_type = order.get("orderType", "MARKET")
             if order_type == "MARKET":
-                # Execute immediately
                 error_msg = self._execute_market_order(order)
 
                 if order["status"] == "FILLED":
                     return self._success_response(order_id)
                 elif order["status"] == "REJECTED":
-                    # We should return 400 if it was rejected immediately
                     return MockResponse({"error": error_msg or "Order rejected"}, 400)
 
-            elif order_type == "LIMIT":
+            elif order_type in _QUEUED_ORDER_TYPES:
                 self.working_orders.append(order)
                 order["status"] = "WORKING"
-                logger.info(f"Queued LIMIT order: {order_id}")
+                logger.info(f"Queued {order_type} order: {order_id}")
                 return self._success_response(order_id)
-            else:
-                return MockResponse({"error": "Unsupported order type"}, 400)
 
         # Simulate Latency: Add to pending queue
         release_step = self.price_engine.current_step + self.latency_steps
@@ -134,7 +150,7 @@ class OrderManager:
         # Check history
         if order_id in self.orders:
             order = self.orders[order_id]
-            if order["status"] in ["FILLED", "CANCELED", "REJECTED", "EXPIRED"]:
+            if order["status"] in _TERMINAL_STATUSES:
                 return MockResponse(
                     {
                         "error": f"Order {order_id} is already {order['status']}, cannot cancel."
@@ -176,11 +192,10 @@ class OrderManager:
 
             if order_type == "MARKET":
                 self._execute_market_order(order)
-            elif order_type == "LIMIT":
+            elif order_type in _QUEUED_ORDER_TYPES:
                 self.working_orders.append(order)
-                logger.info(f"Activated LIMIT order: {order['orderId']}")
+                logger.info(f"Activated {order_type} order: {order['orderId']}")
             else:
-                # Unsupported types rejected immediately upon activation
                 order["status"] = "REJECTED"
                 order["cancelTime"] = self.price_engine.get_current_time().isoformat()
 
@@ -201,51 +216,69 @@ class OrderManager:
             market_data = self.price_engine.get_current_ohlcv(symbol)
 
             should_fill = False
+            fill_price = limit_price
+            high_p = market_data["High"]
+            low_p = market_data["Low"]
+            volume = int(market_data["Volume"])
 
-            # Enhanced Microstructure Logic
+            if order_type == "STOP":
+                stop_price = float(order["stopPrice"])
+                if self._is_stop_triggered(instruction, stop_price, high_p, low_p):
+                    current_price = self.price_engine.get_current_price(symbol)
+                    fill_price = self.execution_engine.calculate_execution_price(
+                        base_price=current_price,
+                        quantity=leg["quantity"],
+                        instruction=instruction,
+                        market_data=market_data,
+                    )
+                    should_fill = True
 
-            if order_type == "LIMIT":
-                # Strict Mode: Price must cross through limit
-                # Touch Mode: Low/High touching limit is enough
+            elif order_type == "STOP_LIMIT":
+                stop_price = float(order["stopPrice"])
+                if self._is_stop_triggered(instruction, stop_price, high_p, low_p):
+                    # Once triggered, behave like a limit order
+                    should_fill = self.execution_engine.should_limit_fill(
+                        limit_price=limit_price,
+                        market_high=high_p,
+                        market_low=low_p,
+                        volume=volume,
+                        quantity=leg["quantity"],
+                    )
 
-                open_p = market_data["Open"]
-                high_p = market_data["High"]
-                low_p = market_data["Low"]
+            elif order_type == "LIMIT":
+                # Strict mode: price must cross through limit, not just touch
+                if self.strict_limit_orders:
+                    open_p = market_data["Open"]
+                    crossed = False
+                    if instruction in ["BUY", "BUY_TO_COVER"]:
+                        crossed = open_p < limit_price or low_p < limit_price
+                    elif instruction in ["SELL", "SELL_SHORT"]:
+                        crossed = open_p > limit_price or high_p > limit_price
+                    if not crossed:
+                        remaining_orders.append(order)
+                        continue
 
-                if instruction in ["BUY", "BUY_TO_COVER"]:
-                    if self.strict_limit_orders:
-                        # Price crossed down through limit?
-                        # Case 1: Gap down (Open < Limit) -> Fill at Open (better price)
-                        # Case 2: Intraday cross (Open > Limit, Low < Limit)
-                        if open_p < limit_price:
-                            should_fill = True  # Gapped below
-                            # TODO: Price improvement logic (fill at Open)
-                        elif low_p < limit_price:
-                            # Traded below limit. If Close > Limit, it bounced.
-                            should_fill = True
-                    else:
-                        # Touch mode (Default)
-                        if low_p <= limit_price:
-                            should_fill = True
-
-                elif instruction in ["SELL", "SELL_SHORT"]:
-                    if self.strict_limit_orders:
-                        if open_p > limit_price or high_p > limit_price:
-                            should_fill = True
-                    else:
-                        if high_p >= limit_price:
-                            should_fill = True
+                # Delegate fill decision to the physics engine
+                should_fill = self.execution_engine.should_limit_fill(
+                    limit_price=limit_price,
+                    market_high=high_p,
+                    market_low=low_p,
+                    volume=volume,
+                    quantity=leg["quantity"],
+                )
 
             if should_fill:
                 try:
-                    self._execute_trade_leg(leg, limit_price)
+                    self._execute_trade_leg(leg, fill_price)
                     order["status"] = "FILLED"
                     order["closeTime"] = (
                         self.price_engine.get_current_time().isoformat()
                     )
-                    logger.info(f"Filled LIMIT order {order['orderId']}")
+                    logger.info(
+                        f"Filled {order_type} order {order['orderId']} @ {fill_price:.4f}"
+                    )
                 except Exception as e:
-                    logger.error(f"Failed to execute LIMIT order: {e}")
+                    logger.error(f"Failed to execute {order_type} order: {e}")
                     order["status"] = "REJECTED"
                     order["cancelTime"] = (
                         self.price_engine.get_current_time().isoformat()
@@ -254,6 +287,17 @@ class OrderManager:
                 remaining_orders.append(order)
 
         self.working_orders = remaining_orders
+
+    @staticmethod
+    def _is_stop_triggered(
+        instruction: str, stop_price: float, high: float, low: float
+    ) -> bool:
+        """Check if a stop order's trigger price has been hit."""
+        if instruction in ("BUY", "BUY_TO_COVER"):
+            return high >= stop_price
+        if instruction in ("SELL", "SELL_SHORT"):
+            return low <= stop_price
+        return False
 
     def _execute_market_order(self, order: dict[str, Any]) -> str | None:
         """Execute immediate market order. Returns error string if rejected, None otherwise."""

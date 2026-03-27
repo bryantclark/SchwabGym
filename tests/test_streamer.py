@@ -103,9 +103,9 @@ def test_streamer_send_list(mock_client):
     req2.parameters = {"keys": "MSFT"}
 
     streamer.send([req1, req2])
-    assert streamer.subscriptions["LEVELONE_EQUITIES"] == [
-        "MSFT"
-    ]  # Last one wins in this simple dict impl
+    # SUBS replaces, ADD appends — so after SUBS(AAPL)+ADD(MSFT) we get both
+    subs = set(streamer.subscriptions["LEVELONE_EQUITIES"])
+    assert subs == {"AAPL", "MSFT"}
 
 
 def test_streamer_invalid_request(mock_client):

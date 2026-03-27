@@ -135,17 +135,9 @@ def test_multi_asset_behavior():
     assert engine.get_current_price("SYM1") == 10.0
     assert engine.get_current_price("SYM2") == 20.0
 
-    # Test unknown symbol (should warn and use main symbol, which is SYM1 or SYM2 depending on dict order)
-    # In the code:
-    # if len(self.data) == 1: fallback
-    # else: warning and use main_symbol
-
-    # Let's verify which is main
-    main_sym = engine.main_symbol
-    expected_price = 10.0 if main_sym == "SYM1" else 20.0
-
-    price = engine.get_current_price("UNKNOWN")
-    assert price == expected_price
+    # Unknown symbol in multi-asset mode should raise KeyError
+    with pytest.raises(KeyError, match="UNKNOWN"):
+        engine.get_current_price("UNKNOWN")
 
 
 def test_price_history_empty(price_engine_setup):
