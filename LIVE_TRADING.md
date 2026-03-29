@@ -10,7 +10,7 @@ This guide outlines the steps required to transition a strategy from the SchwabG
 
 ## Code Migration
 
-The `SchwabGym` API is designed to mirror `schwab-py`. Migration primarily involves updating import statements and initializing the authenticated client.
+The `SchwabGym` API aims to mirror `schwab-py`. For the methods that are implemented (see README for current coverage), migration primarily involves updating import statements and initializing the authenticated client. Some gaps remain — see the [Limitations](README.md#limitations) section.
 
 ### 1. Update Imports
 

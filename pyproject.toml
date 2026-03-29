@@ -8,7 +8,7 @@ name = "schwabgym"
 version = "1.0.0"
 description = "High-fidelity RL environment for training algorithmic trading agents on the Charles Schwab platform"
 readme = "README.md"
-license = "MIT"
+license = { file = "LICENSE" }
 requires-python = ">=3.10"
 authors = [{ name = "Bryant Clark" }]
 keywords = [
@@ -29,6 +29,7 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Topic :: Office/Business :: Financial :: Investment",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
@@ -36,13 +37,15 @@ dependencies = [
   "pandas>=2.0.0",
   "numpy>=1.24.0",
   "gymnasium>=0.29.0",
-  "scipy>=1.11.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=7.4.0",
+  "pytest>=8.1.0",
   "pytest-cov>=4.1.0",
+  "pytest-asyncio>=1.0.0",
+  "pytest-benchmark>=5.0.0",
+  "hypothesis[numpy]>=6.100.0",
   "ruff>=0.4.0",
   "mypy>=1.5.0",
 ]
@@ -55,6 +58,9 @@ live = [
 ]
 plot = [
   "matplotlib>=3.7.0",
+]
+indicators = [
+  "TA-Lib>=0.6.0",
 ]
 
 [project.urls]
@@ -87,7 +93,9 @@ ignore = [
   "SIM108", # ternary operator (readability preference)
   "RUF001", # ambiguous unicode in strings (Greek letters in physics formulas)
   "RUF002", # ambiguous unicode in docstrings (× σ α etc.)
+  "RUF003", # ambiguous unicode in comments (σ, λ, η in physics formulas)
   "RUF022", # unsorted __all__ (we group by category)
+  "B905",   # zip() strict= — not needed for sliced DataFrames of equal length
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -126,6 +134,7 @@ addopts = [
 ]
 markers = [
   "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+  "benchmark: marks benchmark tests (run with --benchmark-enable)",
 ]
 
 # ── Coverage ─────────────────────────────────────────────────────────

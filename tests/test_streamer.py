@@ -32,35 +32,31 @@ def mock_client():
 
 
 def test_streamer_lifecycle(mock_client):
-    async def _test():
-        streamer = MockStreamer(mock_client)
+    streamer = MockStreamer(mock_client)
 
-        # Test subscription
-        req = MagicMock()
-        req.service = "LEVELONE_EQUITIES"
-        req.command = "SUBS"
-        req.parameters = {"keys": "AAPL", "fields": "0,1,2,3"}
+    # Test subscription
+    req = MagicMock()
+    req.service = "LEVELONE_EQUITIES"
+    req.command = "SUBS"
+    req.parameters = {"keys": "AAPL", "fields": "0,1,2,3"}
 
-        streamer.send(req)
-        assert "LEVELONE_EQUITIES" in streamer.subscriptions
-        assert streamer.subscriptions["LEVELONE_EQUITIES"] == ["AAPL"]
+    streamer.send(req)
+    assert "LEVELONE_EQUITIES" in streamer.subscriptions
+    assert streamer.subscriptions["LEVELONE_EQUITIES"] == ["AAPL"]
 
-        # Test unsubscription
-        req_unss = MagicMock()
-        req_unss.service = "LEVELONE_EQUITIES"
-        req_unss.command = "UNSS"
+    # Test unsubscription
+    req_unss = MagicMock()
+    req_unss.service = "LEVELONE_EQUITIES"
+    req_unss.command = "UNSS"
 
-        streamer.send(req_unss)
-        assert "LEVELONE_EQUITIES" not in streamer.subscriptions
-
-    asyncio.run(_test())
+    streamer.send(req_unss)
+    assert "LEVELONE_EQUITIES" not in streamer.subscriptions
 
 
 def test_streamer_start_loop(mock_client):
-    async def _test():
+    async def run():
         streamer = MockStreamer(mock_client)
 
-        # Subscribe
         req = MagicMock()
         req.service = "LEVELONE_EQUITIES"
         req.command = "SUBS"
@@ -69,11 +65,7 @@ def test_streamer_start_loop(mock_client):
 
         receiver = AsyncMock()
 
-        # We need to simulate the loop running and client advancing
-        # We'll patch asyncio.sleep to stop the loop after a few iterations or raise an exception to break out
-
         async def side_effect_sleep(delay):
-            # Advance client step to trigger data emission
             mock_client.current_step += 1
             if mock_client.current_step > 2:
                 streamer.stop()
@@ -87,7 +79,7 @@ def test_streamer_start_loop(mock_client):
         assert call_args["service"] == "LEVELONE_EQUITIES"
         assert call_args["content"][0]["key"] == "AAPL"
 
-    asyncio.run(_test())
+    asyncio.run(run())
 
 
 def test_streamer_send_list(mock_client):

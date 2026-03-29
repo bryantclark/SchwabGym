@@ -86,7 +86,7 @@ class TestClientAuthEdges:
         bad_hash = "BAD_HASH"
 
         # cancel_order
-        resp = client.cancel_order(bad_hash, 123)
+        resp = client.cancel_order(123, bad_hash)
         assert resp.status_code == 401
 
         # replace_order
@@ -94,7 +94,7 @@ class TestClientAuthEdges:
         assert resp.status_code == 401
 
         # get_order
-        resp = client.get_order(bad_hash, 123)
+        resp = client.get_order(123, bad_hash)
         assert resp.status_code == 401
 
         # get_orders_for_account

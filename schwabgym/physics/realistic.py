@@ -76,8 +76,12 @@ class RealisticExecutionEngine(ExecutionEngine):
         low = market_data.get("Low", base_price * 0.99)
         volume = market_data.get("Volume", 100000)
 
-        # Volatility proxy: (High - Low) / Close
-        volatility = (high - low) / base_price if base_price > 0 else 0.01
+        # Parkinson volatility estimator: σ = ln(H/L) / sqrt(4·ln(2))
+        # More statistically efficient than (H-L)/C; unbiased for GBM prices
+        if base_price > 0 and high > low > 0:
+            volatility = np.log(high / low) / np.sqrt(4 * np.log(2))
+        else:
+            volatility = 0.01
 
         # Prevent division by zero
         volume = max(volume, 1)

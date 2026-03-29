@@ -80,6 +80,30 @@ class TestPriceEngine:
         assert len(history) == 2  # step 0 and 1
         assert history[0]["open"] == 100.0
 
+    def test_get_price_history_filters_date_range(self, sample_data):
+        engine = PriceEngine(sample_data)
+        for _ in range(9):
+            engine.advance_time()
+
+        history = engine.get_price_history_data(
+            "AAPL",
+            start_datetime=sample_data.index[2].to_pydatetime(),
+            end_datetime=sample_data.index[4].to_pydatetime(),
+        )
+        assert len(history) == 3
+        assert history[0]["datetime"] == int(sample_data.index[2].timestamp() * 1000)
+        assert history[-1]["datetime"] == int(sample_data.index[4].timestamp() * 1000)
+
+    def test_get_price_history_resamples_to_requested_frequency(self, sample_data):
+        engine = PriceEngine(sample_data)
+        for _ in range(9):
+            engine.advance_time()
+
+        history = engine.get_price_history_data(
+            "AAPL", frequency_type="minute", frequency=5
+        )
+        assert len(history) == 2
+
 
 @pytest.fixture
 def price_engine_setup():

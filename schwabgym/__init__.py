@@ -10,12 +10,12 @@ Repository: https://github.com/bryantclark/SchwabGym
 License: MIT
 
 Key Features:
-    - Perfect API parity with schwab-py (at least that is the goal)
-    - Institutional-grade market physics (Square Root Law)
+    - API designed to mirror schwab-py (work in progress, not yet complete)
+    - Market physics simulation (Square Root Law)
     - Pattern Day Trading enforcement
     - Regulatory fee calculations (SEC, FINRA)
-    - Gymnasium-compatible RL environment shell
-    - Zero-code deployment to live trading
+    - Gymnasium-compatible RL environment
+    - Goal: swap imports to go from sim to live trading
 
 Example Usage:
     >>> from schwabgym import MockClient, load_and_clean_data
@@ -25,7 +25,7 @@ Example Usage:
     >>> client = MockClient(df, initial_cash=25000)
     >>>
     >>> # Trading exactly like schwab-py
-    >>> account_hash = client.get_account_numbers().json()["hashValue"]
+    >>> account_hash = client.get_account_numbers().json()[0]["hashValue"]
     >>> quote = client.get_quotes("AAPL")
     >>> order = eq.equity_buy_market("AAPL", 100)
     >>> client.place_order(account_hash, order)
@@ -44,13 +44,13 @@ For RL Training (Batteries-Included Pattern):
     >>>
     >>> # 2. Inject into the generic environment
     >>> env = SchwabTradingEnv(
-    >>>     client=client,
-    >>>     observation_fn=my_obs_fn,
-    >>>     reward_fn=my_reward_fn,
-    >>>     action_fn=my_action_fn,
-    >>>     observation_space=spaces.Box(...),
-    >>>     action_space=spaces.Box(...)
-    >>> )
+    ...     client=client,
+    ...     observation_fn=my_obs_fn,
+    ...     reward_fn=my_reward_fn,
+    ...     action_fn=my_action_fn,
+    ...     observation_space=spaces.Box(...),
+    ...     action_space=spaces.Box(...),
+    ... )
 """
 
 __version__ = "1.0.0"
@@ -62,7 +62,7 @@ __repository__ = "https://github.com/bryantclark/SchwabGym"
 from schwabgym import orders
 
 # Core simulator
-from schwabgym.client import MockClient
+from schwabgym.client import Client, MockClient
 
 # Data utilities
 from schwabgym.data import (
@@ -79,17 +79,33 @@ from schwabgym.environment import SchwabTradingEnv, ZScoreNormalizer
 # Fee calculator
 from schwabgym.fees import FeeCalculator
 
+# Order/response types
+from schwabgym.orders import (
+    MockEquities,
+    MockOptions,
+    MockOrderBuilder,
+    MockResponse,
+    OptionSymbol,
+    OrderBuilder,
+)
+
 # Physics engines
 from schwabgym.physics import (
     AlmgrenChrissOptimalExecutor,
+    ExecutionEngine,
     FastExecutionEngine,
     HybridExecutionEngine,
+    PhysicsMode,
     RealisticExecutionEngine,
     create_execution_engine,
 )
 
+# Streaming
+from schwabgym.streamer import MockStreamer
+
 __all__ = [
     # Core
+    "Client",
     "MockClient",
     # Data
     "load_and_clean_data",
@@ -101,6 +117,8 @@ __all__ = [
     "SchwabTradingEnv",
     "ZScoreNormalizer",
     # Physics
+    "ExecutionEngine",
+    "PhysicsMode",
     "FastExecutionEngine",
     "RealisticExecutionEngine",
     "HybridExecutionEngine",
@@ -110,6 +128,14 @@ __all__ = [
     "FeeCalculator",
     # Orders
     "orders",
+    "MockEquities",
+    "MockOptions",
+    "MockOrderBuilder",
+    "OrderBuilder",
+    "OptionSymbol",
+    "MockResponse",
+    # Streaming
+    "MockStreamer",
 ]
 
 

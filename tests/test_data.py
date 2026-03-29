@@ -37,10 +37,14 @@ class TestLoadAndCleanData:
         assert "Volatility" in df.columns
 
     def test_load_nonexistent_file(self):
-        """Test that nonexistent file generates dummy data."""
-        df = load_and_clean_data("nonexistent_file.csv")
+        """Test that nonexistent files fail fast by default."""
+        with pytest.raises(FileNotFoundError, match="allow_dummy=True"):
+            load_and_clean_data("nonexistent_file.csv")
 
-        # Should return dummy data, not crash
+    def test_load_nonexistent_file_allow_dummy(self):
+        """Test explicit dummy-data fallback for missing files."""
+        df = load_and_clean_data("nonexistent_file.csv", allow_dummy=True)
+
         assert len(df) > 0
         assert "Close" in df.columns
 

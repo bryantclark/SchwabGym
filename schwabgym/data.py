@@ -101,7 +101,9 @@ def mark_data_quality(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def load_and_clean_data(filepath: str, symbol: str | None = None) -> pd.DataFrame:
+def load_and_clean_data(
+    filepath: str, symbol: str | None = None, *, allow_dummy: bool = False
+) -> pd.DataFrame:
     """
     Load and preprocess historical market data with dual-price state reconstruction.
 
@@ -118,6 +120,8 @@ def load_and_clean_data(filepath: str, symbol: str | None = None) -> pd.DataFram
     Args:
         filepath (str): Path to CSV file
         symbol (str, optional): Symbol name (for logging)
+        allow_dummy (bool): If True, missing files generate synthetic data instead
+            of raising FileNotFoundError.
 
     Returns:
         pd.DataFrame: Cleaned dataframe with columns:
@@ -127,7 +131,7 @@ def load_and_clean_data(filepath: str, symbol: str | None = None) -> pd.DataFram
             - Volatility: Calculated volatility proxy
 
     Raises:
-        FileNotFoundError: If file doesn't exist (generates dummy data instead)
+        FileNotFoundError: If file doesn't exist and allow_dummy is False
         ValueError: If required columns are missing
 
     Example:
@@ -142,7 +146,12 @@ def load_and_clean_data(filepath: str, symbol: str | None = None) -> pd.DataFram
     try:
         df = pd.read_csv(filepath)
         logger.info(f"Loaded {len(df)} rows")
-    except FileNotFoundError:
+    except FileNotFoundError as exc:
+        if not allow_dummy:
+            raise FileNotFoundError(
+                f"File not found: {filepath}. Pass allow_dummy=True to generate "
+                "synthetic data explicitly."
+            ) from exc
         logger.warning(f"File not found: {filepath}. Generating dummy data.")
         return generate_dummy_data(symbol or "DUMMY")
 
@@ -235,12 +244,12 @@ def load_and_clean_data(filepath: str, symbol: str | None = None) -> pd.DataFram
 
     # ==================== CALCULATE VOLATILITY ====================
 
-    # Volatility proxy: (High - Low) / Close
-    # This is used for market impact calculations
+    # Parkinson volatility estimator: σ = ln(H/L) / sqrt(4·ln(2))
+    # More efficient than close-to-close; uses high-low range properly
     if "Volatility" not in df.columns:
-        df["Volatility"] = (df["High"] - df["Low"]) / df["Close"]
+        df["Volatility"] = np.log(df["High"] / df["Low"]) / np.sqrt(4 * np.log(2))
         df["Volatility"] = df["Volatility"].fillna(0.01)  # Default volatility
-        logger.debug("Calculated volatility from price range")
+        logger.debug("Calculated Parkinson volatility from price range")
 
     # ==================== DATA VALIDATION ====================
 
@@ -436,19 +445,86 @@ def resample_data(df: pd.DataFrame, timeframe: str = "5min") -> pd.DataFrame:
     return resampled
 
 
+def _add_indicators_talib(df: pd.DataFrame) -> pd.DataFrame:
+    """Add indicators using TA-Lib (faster, handles edge cases better)."""
+    import talib
+
+    prices = df["AdjClose"].values
+
+    # Simple Moving Averages
+    df["SMA_10"] = talib.SMA(prices, timeperiod=10)
+    df["SMA_20"] = talib.SMA(prices, timeperiod=20)
+    df["SMA_50"] = talib.SMA(prices, timeperiod=50)
+
+    # Exponential Moving Averages
+    df["EMA_12"] = talib.EMA(prices, timeperiod=12)
+    df["EMA_26"] = talib.EMA(prices, timeperiod=26)
+
+    # MACD
+    df["MACD"], df["MACD_Signal"], _ = talib.MACD(
+        prices, fastperiod=12, slowperiod=26, signalperiod=9
+    )
+
+    # RSI
+    df["RSI"] = talib.RSI(prices, timeperiod=14)
+
+    # Bollinger Bands
+    df["BB_Upper"], df["BB_Middle"], df["BB_Lower"] = talib.BBANDS(
+        prices, timeperiod=20, nbdevup=2, nbdevdn=2, matype=0
+    )
+
+    return df
+
+
+def _add_indicators_pandas(df: pd.DataFrame) -> pd.DataFrame:
+    """Fallback indicator calculation using pandas (no TA-Lib required)."""
+    # Simple Moving Averages
+    df["SMA_10"] = df["AdjClose"].rolling(window=10).mean()
+    df["SMA_20"] = df["AdjClose"].rolling(window=20).mean()
+    df["SMA_50"] = df["AdjClose"].rolling(window=50).mean()
+
+    # Exponential Moving Average
+    df["EMA_12"] = df["AdjClose"].ewm(span=12, adjust=False).mean()
+    df["EMA_26"] = df["AdjClose"].ewm(span=26, adjust=False).mean()
+
+    # MACD
+    df["MACD"] = df["EMA_12"] - df["EMA_26"]
+    df["MACD_Signal"] = df["MACD"].ewm(span=9, adjust=False).mean()
+
+    # RSI (Wilder's smoothing)
+    delta = df["AdjClose"].diff()
+    gain = delta.where(delta > 0, 0.0)
+    loss = -delta.where(delta < 0, 0.0)
+    avg_gain = gain.ewm(alpha=1 / 14, min_periods=14, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1 / 14, min_periods=14, adjust=False).mean()
+    rs = avg_gain / avg_loss.replace(0, 1e-10)
+    df["RSI"] = 100 - (100 / (1 + rs))
+
+    # Bollinger Bands
+    df["BB_Middle"] = df["AdjClose"].rolling(window=20).mean()
+    bb_std = df["AdjClose"].rolling(window=20).std()
+    df["BB_Upper"] = df["BB_Middle"] + (bb_std * 2)
+    df["BB_Lower"] = df["BB_Middle"] - (bb_std * 2)
+
+    return df
+
+
 def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """
     Add common technical indicators to dataframe.
 
+    Uses TA-Lib when available (faster, battle-tested edge-case handling).
+    Falls back to pandas implementation otherwise.
+
     Adds:
-    - SMA (Simple Moving Average)
-    - EMA (Exponential Moving Average)
-    - RSI (Relative Strength Index)
-    - MACD (Moving Average Convergence Divergence)
-    - Bollinger Bands
+    - SMA (Simple Moving Average) — 10, 20, 50
+    - EMA (Exponential Moving Average) — 12, 26
+    - RSI (Relative Strength Index) — 14
+    - MACD (Moving Average Convergence Divergence) — 12/26/9
+    - Bollinger Bands — 20, 2σ
 
     Args:
-        df (pd.DataFrame): Input dataframe
+        df (pd.DataFrame): Input dataframe with 'AdjClose' column
 
     Returns:
         pd.DataFrame: Dataframe with added indicator columns
@@ -463,33 +539,12 @@ def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """
     logger.info("Adding technical indicators")
 
-    # Simple Moving Averages
-    df["SMA_10"] = df["AdjClose"].rolling(window=10).mean()
-    df["SMA_20"] = df["AdjClose"].rolling(window=20).mean()
-    df["SMA_50"] = df["AdjClose"].rolling(window=50).mean()
-
-    # Exponential Moving Average
-    df["EMA_12"] = df["AdjClose"].ewm(span=12, adjust=False).mean()
-    df["EMA_26"] = df["AdjClose"].ewm(span=26, adjust=False).mean()
-
-    # MACD
-    df["MACD"] = df["EMA_12"] - df["EMA_26"]
-    df["MACD_Signal"] = df["MACD"].ewm(span=9, adjust=False).mean()
-
-    # RSI
-    delta = df["AdjClose"].diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-    rs = gain / loss.replace(0, 1e-10)
-    df["RSI"] = 100 - (100 / (1 + rs))
-
-    # Bollinger Bands
-    df["BB_Middle"] = df["AdjClose"].rolling(window=20).mean()
-    bb_std = df["AdjClose"].rolling(window=20).std()
-    df["BB_Upper"] = df["BB_Middle"] + (bb_std * 2)
-    df["BB_Lower"] = df["BB_Middle"] - (bb_std * 2)
-
-    logger.info("Technical indicators added")
+    try:
+        df = _add_indicators_talib(df)
+        logger.info("Technical indicators added (TA-Lib)")
+    except ImportError:
+        df = _add_indicators_pandas(df)
+        logger.info("Technical indicators added (pandas fallback)")
 
     return df
 

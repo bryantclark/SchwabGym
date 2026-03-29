@@ -40,10 +40,12 @@ class OrderManager:
         price_engine: PriceEngine,
         execution_engine: ExecutionEngine,
         latency_mode: bool = True,
+        account_hash: str = "",
     ):
         self.account = account
         self.price_engine = price_engine
         self.execution_engine = execution_engine
+        self.account_hash = account_hash
 
         self.orders: dict[int, dict] = {}
         self.working_orders: list[dict] = []
@@ -62,16 +64,22 @@ class OrderManager:
         self.pending_orders.clear()
         self.next_order_id = 1000
 
-    def place_order(self, order: dict[str, Any]) -> MockResponse:
+    def place_order(self, order: dict[str, Any] | Any) -> MockResponse:
         """
         Validate and place an order.
 
         Args:
-            order: Order specification dict (from MockEquities/MockOptions builders).
+            order: Order specification — accepts a dict (from MockEquities/MockOptions)
+                or a schwab-py ``OrderBuilder`` object (calls ``.build()`` automatically).
 
         Returns:
             MockResponse with 201 on success, 400 on rejection.
         """
+        # schwab-py order helpers return OrderBuilder objects with a .build() method.
+        # Convert to dict so the rest of the pipeline works identically.
+        if hasattr(order, "build") and callable(order.build):
+            order = order.build()
+
         order_type = order.get("orderType", "MARKET")
         if order_type not in _SUPPORTED_ORDER_TYPES:
             return MockResponse({"error": f"Unsupported order type: {order_type}"}, 400)
@@ -160,8 +168,10 @@ class OrderManager:
 
         return MockResponse({"error": "Order not found"}, 404)
 
-    def replace_order(self, order_id: int, order_spec: dict[str, Any]) -> MockResponse:
-        """Replace an order."""
+    def replace_order(
+        self, order_id: int, order_spec: dict[str, Any] | Any
+    ) -> MockResponse:
+        """Replace an order (accepts dict or OrderBuilder)."""
         cancel_resp = self.cancel_order(order_id)
         if cancel_resp.status_code != 200:
             return cancel_resp
@@ -362,6 +372,6 @@ class OrderManager:
             {},
             201,
             headers={
-                "Location": f"https://api.schwab.com/v1/accounts/{self.account.account_number}/orders/{order_id}"
+                "Location": f"https://api.schwabapi.com/trader/v1/accounts/{self.account_hash}/orders/{order_id}"
             },
         )

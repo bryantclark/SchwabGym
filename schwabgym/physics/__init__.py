@@ -31,7 +31,7 @@ def create_execution_engine(mode: str = "realistic", **kwargs) -> ExecutionEngin
     Factory function for creating execution engines.
 
     Args:
-        mode: One of "fast", "realistic", "hybrid", or "almgren_chriss".
+        mode: One of "fast", "realistic", or "hybrid".
         **kwargs: Engine-specific parameters.
 
     Returns:

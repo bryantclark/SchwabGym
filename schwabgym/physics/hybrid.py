@@ -73,6 +73,15 @@ class HybridExecutionEngine(ExecutionEngine):
             self.current_mode = PhysicsMode.FAST
             self._active_engine = self.fast
 
+    def prepare_step(self) -> None:
+        """Pick a fresh engine for the next simulation step."""
+        self.select_engine_for_step()
+
+    def reset_episode(self) -> None:
+        """Clear any active mode so a new episode can re-sample physics."""
+        self.current_mode = None
+        self._active_engine = None
+
     def _get_engine(self) -> ExecutionEngine:
         """Return the active engine, selecting one if needed."""
         if self._active_engine is None:

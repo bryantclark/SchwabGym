@@ -28,6 +28,8 @@ wheels/
 .coverage
 htmlcov/
 .tox/
+.hypothesis/
+.benchmarks/
 
 # IDEs
 .vscode/
@@ -58,7 +60,13 @@ credentials/
 *.log
 logs/
 
+# Virtual environments
+.venv/
+venv/
+
+# Claude Code
+.claude/worktrees/
+
 # OS
 .DS_Store
 Thumbs.db
-```

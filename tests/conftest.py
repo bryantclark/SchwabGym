@@ -47,7 +47,7 @@ def client(sample_data):
 @pytest.fixture
 def account_hash(client):
     """Get account hash from client."""
-    return client.get_account_numbers().json()["hashValue"]
+    return client.get_account_numbers().json()[0]["hashValue"]
 
 
 @pytest.fixture
@@ -65,6 +65,25 @@ def fast_client(sample_data):
     return MockClient(
         sample_data, initial_cash=10000.0, execution_engine=engine, latency_mode=False
     )
+
+
+@pytest.fixture
+def multi_asset_data():
+    """Create deterministic multi-asset data for market-data API tests."""
+    from schwabgym import generate_dummy_data
+
+    return {
+        "TEST": generate_dummy_data("TEST", periods=40, start_price=100.0),
+        "ALT": generate_dummy_data("ALT", periods=40, start_price=50.0),
+    }
+
+
+@pytest.fixture
+def multi_asset_client(multi_asset_data):
+    """Create a multi-asset client for movers/instrument tests."""
+    from schwabgym import MockClient
+
+    return MockClient(multi_asset_data, initial_cash=10000.0, latency_mode=False)
 
 
 @pytest.fixture

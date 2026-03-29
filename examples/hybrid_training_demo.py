@@ -59,7 +59,7 @@ def compare_execution_modes(df, ticker="AAPL"):
 
         # Create client with specific engine
         client = MockClient(df, initial_cash=100000, execution_engine=engine)
-        account_hash = client.get_account_numbers().json()["hashValue"]
+        account_hash = client.get_account_numbers().json()[0]["hashValue"]
 
         # Execute buy
         buy_order = eq.equity_buy_market(ticker, test_quantity)
@@ -175,7 +175,7 @@ def train_with_domain_randomization(df, ticker="AAPL"):
     )
 
     client = MockClient(df, initial_cash=50000, execution_engine=hybrid_engine)
-    account_hash = client.get_account_numbers().json()["hashValue"]
+    account_hash = client.get_account_numbers().json()[0]["hashValue"]
 
     # Simulate 20 episodes
     n_episodes = 20
@@ -279,7 +279,15 @@ When training on GPU (Colab Pro / Colab Pro+), you have different considerations
    def make_env():
        df = load_and_clean_data('AAPL.csv')
        engine = HybridExecutionEngine(realistic_probability=0.3)
-       return SchwabTradingEnv(df, 'AAPL', execution_engine=engine)
+       client = MockClient(df, execution_engine=engine)
+       return SchwabTradingEnv(
+           client=client,
+           observation_fn=obs_fn,
+           reward_fn=reward_fn,
+           action_fn=action_fn,
+           observation_space=obs_space,
+           action_space=action_space,
+       )
 
    env = SubprocVecEnv([make_env for _ in range(4)])
 

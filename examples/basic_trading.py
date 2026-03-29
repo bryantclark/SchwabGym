@@ -42,12 +42,12 @@ def simple_mean_reversion_strategy():
     # Assuming data is in ../data relative to examples/
     data_path = os.path.join(os.path.dirname(__file__), "..", "data", "SPY_1min.csv")
 
-    # For demo purposes, if file doesn't exist, generate dummy data
-    df = load_and_clean_data(data_path, symbol=ticker)
+    # For demo purposes, explicitly allow dummy data if the CSV is missing
+    df = load_and_clean_data(data_path, symbol=ticker, allow_dummy=True)
 
     # Initialize simulator with $100k starting capital
     client = MockClient(df, initial_cash=100000.0)
-    account_hash = client.get_account_numbers().json()["hashValue"]
+    account_hash = client.get_account_numbers().json()[0]["hashValue"]
 
     logger.info("=" * 60)
     logger.info("MEAN REVERSION STRATEGY BACKTEST")

@@ -37,10 +37,10 @@ class TestOrderManagement:
         )
         order_id = next(iter(client.orders.keys()))
 
-        resp = client.cancel_order(client.account_hash, order_id)
+        resp = client.cancel_order(order_id, client.account_hash)
         assert resp.status_code == 200
 
-        status = client.get_order(client.account_hash, order_id).json()["status"]
+        status = client.get_order(order_id, client.account_hash).json()["status"]
         assert status == "CANCELED"
 
     def test_cancel_filled_order(self, client):
@@ -48,7 +48,7 @@ class TestOrderManagement:
         client.place_order(client.account_hash, eq.equity_buy_market("TEST", 10))
         order_id = next(iter(client.orders.keys()))
 
-        resp = client.cancel_order(client.account_hash, order_id)
+        resp = client.cancel_order(order_id, client.account_hash)
         assert resp.status_code == 400
 
     def test_replace_order(self, client):
@@ -99,6 +99,32 @@ class TestOrderManagement:
         orders = resp.json()
         assert len(orders) == 1
 
+    def test_get_orders_respects_entered_time_filters(self, client):
+        """Order queries should filter by entered-time bounds."""
+        client.place_order(client.account_hash, eq.equity_buy_market("TEST", 1))
+        first_id = min(client.orders)
+        first_time = client.orders[first_id]["enteredTime"]
+
+        client.advance_time()
+        current_price = client.get_quotes("TEST").json()["TEST"]["quote"]["lastPrice"]
+        client.place_order(
+            client.account_hash, eq.equity_buy_limit("TEST", 1, current_price * 0.5)
+        )
+        second_id = max(client.orders)
+        second_time = client.orders[second_id]["enteredTime"]
+
+        resp = client.get_orders_for_account(
+            client.account_hash, from_entered_datetime=second_time
+        )
+        orders = resp.json()
+        assert [o["orderId"] for o in orders] == [second_id]
+
+        resp = client.get_orders_for_account(
+            client.account_hash, to_entered_datetime=first_time
+        )
+        orders = resp.json()
+        assert [o["orderId"] for o in orders] == [first_id]
+
     def test_limit_order_lifecycle(self, client):
         """Test that a limit order transitions from WORKING to FILLED."""
         # 1. Place limit order below current price (BUY)
@@ -118,12 +144,12 @@ class TestOrderManagement:
         order_id = client.working_orders[0]["orderId"]
 
         # 2. Verify status is WORKING
-        order_status = client.get_order(client.account_hash, order_id).json()
+        order_status = client.get_order(order_id, client.account_hash).json()
         assert order_status["status"] == "WORKING"
 
         # 3. Advance time
         client.advance_time()
 
         # 4. Verify status is FILLED
-        order_status = client.get_order(client.account_hash, order_id).json()
+        order_status = client.get_order(order_id, client.account_hash).json()
         assert order_status["status"] == "FILLED"

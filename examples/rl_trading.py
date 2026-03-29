@@ -51,7 +51,7 @@ class StrategyObservationBuilder:
         sma = np.mean(prices[-20:]) if len(prices) >= 20 else prices[-1]
 
         # 3. Get Account State
-        account_hash = client.get_account_numbers().json()["hashValue"]
+        account_hash = client.get_account_numbers().json()[0]["hashValue"]
         acct = client.get_account(account_hash).json()["securitiesAccount"]
 
         # Find position
@@ -113,7 +113,7 @@ def strategy_reward_fn(client: MockClient) -> float:
 def strategy_action_fn(client: MockClient, action: np.ndarray):
     """Defines how Agent actions translate to Orders."""
     ticker = "AAPL"  # Hardcoded for single-agent demo
-    account_hash = client.get_account_numbers().json()["hashValue"]
+    account_hash = client.get_account_numbers().json()[0]["hashValue"]
 
     # Continuous action: [Signal (-1 to 1), Size (0 to 1)]
     signal = float(action[0])

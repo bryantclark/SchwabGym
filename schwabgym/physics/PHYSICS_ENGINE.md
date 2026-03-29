@@ -26,7 +26,7 @@ The Schwab Trading Simulator now supports **three execution modes** that control
 
 **Example**:
 ```python
-from advanced_physics import FastExecutionEngine
+from schwabgym.physics import FastExecutionEngine
 
 engine = FastExecutionEngine(base_slippage=0.05)
 client = MockClient(df, execution_engine=engine)
@@ -53,7 +53,7 @@ client = MockClient(df, execution_engine=engine)
 
 **Example**:
 ```python
-from advanced_physics import RealisticExecutionEngine
+from schwabgym.physics import RealisticExecutionEngine
 
 engine = RealisticExecutionEngine(
     impact_coefficient=0.7,      # Y in Square Root Law
@@ -83,7 +83,7 @@ client = MockClient(df, execution_engine=engine)
 
 **Example**:
 ```python
-from advanced_physics import HybridExecutionEngine
+from schwabgym.physics import HybridExecutionEngine
 
 engine = HybridExecutionEngine(
     realistic_probability=0.3,  # 30% realistic, 70% fast
@@ -190,17 +190,41 @@ This square root relationship prevents the simulator from over-penalizing large 
 ### Setup
 
 ```python
+import numpy as np
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import SubprocVecEnv
-from trading_env import SchwabTradingEnv
-from advanced_physics import HybridExecutionEngine
+from gymnasium import spaces
+from schwabgym import MockClient, load_and_clean_data
+from schwabgym.environment import SchwabTradingEnv
+from schwabgym.physics import HybridExecutionEngine
 
 # Create environment factory
 def make_env():
     df = load_and_clean_data('AAPL_5min.csv')
     engine = HybridExecutionEngine(realistic_probability=0.3)
     client = MockClient(df, execution_engine=engine)
-    return SchwabTradingEnv(client, ticker='AAPL')
+
+    def observation_fn(client):
+        candles = client.get_price_history_every_five_minutes("AAPL").json()["candles"]
+        closes = [c["close"] for c in candles[-20:]]
+        padded = [0.0] * max(0, 20 - len(closes)) + closes
+        return np.array(padded, dtype=np.float32)
+
+    def reward_fn(client):
+        acct = client.get_account(client.account_hash).json()["securitiesAccount"]
+        return float(acct["currentBalances"]["liquidationValue"])
+
+    def action_fn(client, action):
+        return None
+
+    return SchwabTradingEnv(
+        client=client,
+        observation_fn=observation_fn,
+        reward_fn=reward_fn,
+        action_fn=action_fn,
+        observation_space=spaces.Box(low=0, high=10000, shape=(20,), dtype=np.float32),
+        action_space=spaces.Discrete(1),
+    )
 
 # Vectorize (4 parallel environments)
 env = SubprocVecEnv([make_env for _ in range(4)])
@@ -252,7 +276,7 @@ Based on your **risk aversion λ**:
 ### Example
 
 ```python
-from advanced_physics import AlmgrenChrissOptimalExecutor
+from schwabgym.physics import AlmgrenChrissOptimalExecutor
 
 executor = AlmgrenChrissOptimalExecutor(
     lambda_risk=0.01,  # Risk aversion

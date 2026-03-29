@@ -12,6 +12,92 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+_HISTORY_LOOKBACK = 50
+_RESAMPLE_RULES: dict[tuple[str, int], str] = {
+    ("minute", 1): "1min",
+    ("minute", 5): "5min",
+    ("minute", 10): "10min",
+    ("minute", 15): "15min",
+    ("minute", 30): "30min",
+    ("daily", 1): "1D",
+    ("weekly", 1): "W-MON",
+    ("monthly", 1): "MS",
+}
+
+
+def _coerce_history_arg(value):
+    if hasattr(value, "value"):
+        value = value.value
+    if isinstance(value, str):
+        return value.lower()
+    return value
+
+
+def _normalize_timestamp(
+    value: datetime.datetime | int | float | None, index: pd.DatetimeIndex
+) -> pd.Timestamp | None:
+    if value is None:
+        return None
+
+    if isinstance(value, int | float):
+        unit = "ms" if abs(value) >= 10_000_000_000 else "s"
+        ts = pd.Timestamp(value, unit=unit)
+    else:
+        ts = pd.Timestamp(value)
+
+    if index.tz is None and ts.tzinfo is not None:
+        return ts.tz_convert(None)
+    if index.tz is not None and ts.tzinfo is None:
+        return ts.tz_localize(index.tz)
+    if index.tz is not None and ts.tzinfo is not None:
+        return ts.tz_convert(index.tz)
+    return ts
+
+
+def _resolve_period_start(
+    period_type, period, end_timestamp: pd.Timestamp
+) -> pd.Timestamp | None:
+    period_type = _coerce_history_arg(period_type)
+    period = int(period) if period is not None else None
+
+    if period_type == "ytd":
+        return pd.Timestamp(
+            year=end_timestamp.year, month=1, day=1, tz=end_timestamp.tz
+        )
+    if period is None:
+        return None
+    if period_type == "day":
+        return end_timestamp - pd.Timedelta(days=period)
+    if period_type == "month":
+        return end_timestamp - pd.DateOffset(months=period)
+    if period_type == "year":
+        return end_timestamp - pd.DateOffset(years=period)
+    return None
+
+
+def _approx_frequency_seconds(offset) -> float | None:
+    if offset is None:
+        return None
+    if isinstance(offset, pd.offsets.Week):
+        return float(offset.n * 7 * 24 * 60 * 60)
+    if isinstance(offset, pd.offsets.MonthBegin):
+        return float(offset.n * 30 * 24 * 60 * 60)
+
+    try:
+        return float(offset.nanos) / 1_000_000_000
+    except ValueError:
+        return None
+
+
+def _infer_offset(index: pd.DatetimeIndex):
+    if len(index) >= 3:
+        inferred = pd.infer_freq(index)
+        if inferred is not None:
+            return pd.tseries.frequencies.to_offset(inferred)
+    if len(index) >= 2:
+        return pd.tseries.frequencies.to_offset(index[1] - index[0])
+    return None
+
 
 class PriceEngine:
     """
@@ -178,7 +264,104 @@ class PriceEngine:
             }
         return response_body
 
-    def get_price_history_data(self, symbol: str) -> list[dict]:
+    def _filter_history_frame(
+        self,
+        symbol: str,
+        *,
+        period_type=None,
+        period=None,
+        start_datetime: datetime.datetime | int | float | None = None,
+        end_datetime: datetime.datetime | int | float | None = None,
+    ) -> pd.DataFrame:
+        """Slice history to the visible data up to the current simulation step."""
+        target_df = self._resolve_dataframe(symbol).iloc[: self.current_step + 1]
+        if target_df.empty:
+            return target_df
+
+        if (
+            start_datetime is None
+            and end_datetime is None
+            and period_type is None
+            and period is None
+        ):
+            return target_df.iloc[max(0, len(target_df) - _HISTORY_LOOKBACK) :]
+
+        end_ts = _normalize_timestamp(end_datetime, target_df.index)
+        if end_ts is None:
+            end_ts = target_df.index[-1]
+
+        start_ts = _normalize_timestamp(start_datetime, target_df.index)
+        if start_ts is None:
+            start_ts = _resolve_period_start(period_type, period, end_ts)
+
+        subset = target_df
+        if start_ts is not None:
+            subset = subset[subset.index >= start_ts]
+        if end_ts is not None:
+            subset = subset[subset.index <= end_ts]
+        return subset
+
+    def _resample_history_frame(
+        self, subset: pd.DataFrame, *, frequency_type=None, frequency=None
+    ) -> pd.DataFrame:
+        """Resample to coarser intervals when the request asks for them."""
+        frequency_type = _coerce_history_arg(frequency_type)
+        frequency = int(frequency) if frequency is not None else None
+        if subset.empty or frequency_type is None or frequency is None:
+            return subset
+
+        rule = _RESAMPLE_RULES.get((frequency_type, frequency))
+        if rule is None:
+            logger.warning(
+                "Unsupported price history frequency request frequency_type=%s frequency=%s",
+                frequency_type,
+                frequency,
+            )
+            return subset
+
+        source_offset = _infer_offset(subset.index)
+        target_offset = pd.tseries.frequencies.to_offset(rule)
+        source_seconds = _approx_frequency_seconds(source_offset)
+        target_seconds = _approx_frequency_seconds(target_offset)
+
+        if source_seconds is not None and target_seconds is not None:
+            if target_seconds < source_seconds:
+                logger.warning(
+                    "Requested %s bars from %s source data; returning source frequency.",
+                    rule,
+                    getattr(source_offset, "freqstr", source_offset),
+                )
+                return subset
+            if target_seconds == source_seconds:
+                return subset
+
+        agg = {
+            "Open": "first",
+            "High": "max",
+            "Low": "min",
+            "Close": "last",
+            "Volume": "sum",
+        }
+        if "AdjClose" in subset.columns:
+            agg["AdjClose"] = "last"
+        if "Volatility" in subset.columns:
+            agg["Volatility"] = "mean"
+
+        resampled = subset.resample(rule, label="left", closed="left").agg(agg)
+        resampled.dropna(subset=["Open", "High", "Low", "Close"], inplace=True)
+        return resampled
+
+    def get_price_history_data(
+        self,
+        symbol: str,
+        *,
+        period_type=None,
+        period=None,
+        frequency_type=None,
+        frequency=None,
+        start_datetime: datetime.datetime | int | float | None = None,
+        end_datetime: datetime.datetime | int | float | None = None,
+    ) -> list[dict]:
         """
         Get historical candles up to current step.
 
@@ -188,23 +371,37 @@ class PriceEngine:
         Returns:
             List[Dict]: List of candle dicts.
         """
-        LOOKBACK = 50
-        target_df = self._resolve_dataframe(symbol)
-        start_idx = max(0, self.current_step - LOOKBACK + 1)
-        col_close = "AdjClose" if "AdjClose" in target_df.columns else "Close"
+        subset = self._filter_history_frame(
+            symbol,
+            period_type=period_type,
+            period=period,
+            start_datetime=start_datetime,
+            end_datetime=end_datetime,
+        )
+        subset = self._resample_history_frame(
+            subset, frequency_type=frequency_type, frequency=frequency
+        )
 
-        subset = target_df.iloc[start_idx : self.current_step + 1]
-        candles = []
+        # schwab-py returns raw Close prices, not adjusted.
+        col_close = "Close"
 
-        for ts, row in subset.iterrows():
-            candles.append(
-                {
-                    "open": float(row["Open"]),
-                    "high": float(row["High"]),
-                    "low": float(row["Low"]),
-                    "close": float(row[col_close]),
-                    "volume": int(row["Volume"]),
-                    "datetime": int(ts.timestamp() * 1000),
-                }
+        # Vectorized: build candles without iterrows()
+        candles = [
+            {
+                "open": float(o),
+                "high": float(h),
+                "low": float(lo),
+                "close": float(c),
+                "volume": int(v),
+                "datetime": int(ts.timestamp() * 1000),
+            }
+            for ts, o, h, lo, c, v in zip(
+                subset.index,
+                subset["Open"].values,
+                subset["High"].values,
+                subset["Low"].values,
+                subset[col_close].values,
+                subset["Volume"].values,
             )
+        ]
         return candles

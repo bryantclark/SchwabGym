@@ -29,7 +29,7 @@ class Account:
     # Regulatory Constants
     PDT_MIN_EQUITY = 25000.0
     PDT_DAY_TRADE_LIMIT = 4
-    PDT_LOOKBACK_DAYS = 5
+    PDT_LOOKBACK_BUSINESS_DAYS = 5
     INITIAL_MARGIN_RATIO = 0.50
     MAINTENANCE_MARGIN_RATIO = 0.30
 
@@ -126,8 +126,10 @@ class Account:
         Raises:
             ValueError if trade is blocked.
         """
-        # Update day trades window
-        cutoff_date = current_date - datetime.timedelta(days=self.PDT_LOOKBACK_DAYS)
+        # Update day trades window — FINRA PDT rule uses 5 business days
+        cutoff_date = self._subtract_business_days(
+            current_date, self.PDT_LOOKBACK_BUSINESS_DAYS
+        )
         while self.day_trades and self.day_trades[0] < cutoff_date:
             self.day_trades.popleft()
 
@@ -145,8 +147,22 @@ class Account:
                 raise ValueError(
                     f"403 Forbidden: Pattern Day Trader Restriction. "
                     f"Account equity ${current_equity:,.2f} < ${self.PDT_MIN_EQUITY:,.2f} "
-                    f"and {day_trade_count} day trades in {self.PDT_LOOKBACK_DAYS} days."
+                    f"and {day_trade_count} day trades in "
+                    f"{self.PDT_LOOKBACK_BUSINESS_DAYS} business days."
                 )
+
+    @staticmethod
+    def _subtract_business_days(
+        from_date: datetime.date, business_days: int
+    ) -> datetime.date:
+        """Subtract *business_days* (Mon-Fri) from *from_date*."""
+        current = from_date
+        remaining = business_days
+        while remaining > 0:
+            current -= datetime.timedelta(days=1)
+            if current.weekday() < 5:  # Mon=0 .. Fri=4
+                remaining -= 1
+        return current
 
     def execute_trade(
         self,

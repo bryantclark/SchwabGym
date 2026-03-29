@@ -56,3 +56,25 @@ def test_hybrid_statistics():
     assert stats["realistic_probability"] == 0.3
     # current_mode may be None before any call
     assert stats["current_mode"] in (None, "fast", "realistic")
+
+
+def test_hybrid_prepare_step_reselects_mode():
+    engine = HybridExecutionEngine(realistic_probability=0.5, seed=123)
+    modes = []
+
+    for _ in range(20):
+        engine.prepare_step()
+        modes.append(engine.current_mode.value)
+
+    assert "fast" in modes
+    assert "realistic" in modes
+
+
+def test_hybrid_reset_episode_clears_active_mode():
+    engine = HybridExecutionEngine(realistic_probability=1.0, seed=42)
+    engine.prepare_step()
+    assert engine.current_mode is not None
+
+    engine.reset_episode()
+    stats = engine.get_statistics()
+    assert stats["current_mode"] is None

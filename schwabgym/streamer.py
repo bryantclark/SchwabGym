@@ -2,7 +2,10 @@
 SchwabGym Mock Streamer
 =======================
 
-Mimics the schwab-py Streamer interface for async data streaming.
+Provides basic simulated streaming for the local price engine.
+
+This is intentionally narrower than ``schwab.streaming.StreamClient`` and should
+be treated as a lightweight test helper, not a drop-in replacement.
 """
 
 import asyncio
@@ -14,9 +17,9 @@ logger = logging.getLogger(__name__)
 
 class MockStreamer:
     """
-    Mimics schwab.streaming.Streamer.
+    Basic streaming simulation for ``MockClient``.
 
-    Streams Level 1 data from the simulator's PriceEngine.
+    Streams Level 1 equity data from the simulator's ``PriceEngine``.
     """
 
     def __init__(self, client):

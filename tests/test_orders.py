@@ -9,7 +9,14 @@ Author: Bryant Clark
 
 import pytest
 
-from schwabgym.orders import MockEquities, MockOptions, MockResponse
+from schwabgym.orders import (
+    MockEquities,
+    MockOptions,
+    MockOrderBuilder,
+    MockResponse,
+    OptionSymbol,
+    bull_call_vertical_open,
+)
 
 
 class TestMockResponse:
@@ -40,6 +47,17 @@ class TestMockResponse:
 
 class TestMockEquities:
     """Test equity order builders."""
+
+    def test_helpers_return_fluent_builders(self):
+        order = (
+            MockEquities.equity_buy_market("AAPL", 100)
+            .set_duration("GOOD_TILL_CANCEL")
+            .set_session("SEAMLESS")
+        )
+
+        assert isinstance(order, MockOrderBuilder)
+        assert order.build()["duration"] == "GOOD_TILL_CANCEL"
+        assert order.build()["session"] == "SEAMLESS"
 
     def test_market_buy(self):
         order = MockEquities.equity_buy_market("AAPL", 100)
@@ -81,6 +99,14 @@ class TestMockEquities:
 class TestMockOptions:
     """Test option order builders."""
 
+    def test_option_symbol_round_trip(self):
+        symbol = OptionSymbol("SPY", "240621", "C", "555")
+
+        built = symbol.build()
+
+        assert built == "SPY   240621C00555000"
+        assert OptionSymbol.parse_symbol(built).build() == built
+
     def test_option_buy_to_open_market(self):
         order = MockOptions.option_buy_to_open_market("AAPL_230616C150", 1)
         assert order["orderType"] == "MARKET"
@@ -109,3 +135,18 @@ class TestMockOptions:
             "AAPL_230616C150", 1, "BUY_TO_OPEN", "LIMIT", price=5.5
         )
         assert order["price"] == "5.50"
+
+    def test_vertical_spread_builder(self):
+        order = bull_call_vertical_open(
+            "AAPL  240621C00150000",
+            "AAPL  240621C00155000",
+            2,
+            1.25,
+        ).build()
+
+        assert order["orderType"] == "NET_DEBIT"
+        assert order["complexOrderStrategyType"] == "VERTICAL"
+        assert order["quantity"] == 2
+        assert order["price"] == "1.25"
+        assert order["orderLegCollection"][0]["instruction"] == "BUY_TO_OPEN"
+        assert order["orderLegCollection"][1]["instruction"] == "SELL_TO_OPEN"

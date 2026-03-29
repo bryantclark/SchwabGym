@@ -32,9 +32,11 @@ class TestMockClient:
         resp = client.get_account_numbers()
         assert resp.status_code == 200
         data = resp.json()
-        assert "accountNumber" in data
-        assert "hashValue" in data
-        assert data["hashValue"] == client.account_hash
+        assert isinstance(data, list)
+        assert len(data) == 1
+        assert "accountNumber" in data[0]
+        assert "hashValue" in data[0]
+        assert data[0]["hashValue"] == client.account_hash
 
     def test_account_details(self, client):
         """Test account details retrieval."""
@@ -72,6 +74,86 @@ class TestMockClient:
         assert "candles" in data
         assert len(data["candles"]) > 0
         assert "close" in data["candles"][0]
+
+    def test_price_history_filters_date_range(self, client):
+        """Explicit start/end datetimes should filter the returned candles."""
+        for _ in range(40):
+            client.advance_time()
+
+        start = client.df.index[10].to_pydatetime()
+        end = client.df.index[20].to_pydatetime()
+
+        resp = client.get_price_history("TEST", start_datetime=start, end_datetime=end)
+        candles = resp.json()["candles"]
+
+        assert len(candles) == 11
+        assert candles[0]["datetime"] == int(client.df.index[10].timestamp() * 1000)
+        assert candles[-1]["datetime"] == int(client.df.index[20].timestamp() * 1000)
+
+    def test_price_history_convenience_resamples(self, client):
+        """Convenience wrappers should request coarser bars than the base minute view."""
+        for _ in range(29):
+            client.advance_time()
+
+        minute = client.get_price_history_every_minute("TEST").json()["candles"]
+        five = client.get_price_history_every_five_minutes("TEST").json()["candles"]
+        ten = client.get_price_history_every_ten_minutes("TEST").json()["candles"]
+
+        assert len(minute) > len(five) > 0
+        assert len(five) >= len(ten) > 0
+
+    def test_token_age_returns_seconds(self, client):
+        """token_age() should match schwab-py's seconds contract."""
+        assert client.token_age() == 0
+
+    def test_preview_order_materializes_builder(self, client):
+        """Preview responses should contain plain JSON-like dict payloads."""
+        order = eq.equity_buy_market("TEST", 1).set_duration("GOOD_TILL_CANCEL")
+
+        resp = client.preview_order(client.account_hash, order)
+        data = resp.json()
+
+        assert isinstance(data["orderStrategy"], dict)
+        assert data["orderStrategy"]["duration"] == "GOOD_TILL_CANCEL"
+
+    def test_place_order_accepts_real_schwab_order_builder(self, client):
+        """The simulator should accept real schwab-py OrderBuilder instances."""
+        equities = pytest.importorskip("schwab.orders.equities")
+
+        order = equities.equity_buy_market("TEST", 1)
+        resp = client.place_order(client.account_hash, order)
+
+        assert resp.status_code == 201
+        order_id = next(iter(client.orders))
+        assert client.orders[order_id]["orderLegCollection"][0]["instruction"] == "BUY"
+
+    def test_get_transactions_applies_filters(self, client):
+        """Transaction queries should honor symbol, date, and type filters."""
+        client.place_order(client.account_hash, eq.equity_buy_market("TEST", 1))
+        client.advance_time()
+        client.place_order(client.account_hash, eq.equity_buy_market("ALT", 1))
+
+        order_ids = sorted(client.orders)
+        second_time = client.orders[order_ids[1]]["enteredTime"]
+
+        resp = client.get_transactions(client.account_hash, symbol="ALT")
+        transactions = resp.json()
+        assert len(transactions) == 1
+        assert transactions[0]["orderLegCollection"][0]["instrument"]["symbol"] == "ALT"
+
+        resp = client.get_transactions(
+            client.account_hash,
+            start_date=second_time,
+            transaction_types="TRADE",
+        )
+        filtered = resp.json()
+        assert len(filtered) == 1
+        assert filtered[0]["orderId"] == order_ids[1]
+
+        resp = client.get_transactions(
+            client.account_hash, transaction_types="DIVIDEND_OR_INTEREST"
+        )
+        assert resp.json() == []
 
     def test_market_buy_order(self, client):
         """Test placing a market buy order."""
@@ -312,7 +394,7 @@ def test_unauthorized_access(valid_df):
     assert resp.status_code == 401
 
     # cancel_order
-    resp = client.cancel_order(wrong_hash, 123)
+    resp = client.cancel_order(123, wrong_hash)
     assert resp.status_code == 401
 
     # replace_order
@@ -320,7 +402,7 @@ def test_unauthorized_access(valid_df):
     assert resp.status_code == 401
 
     # get_order
-    resp = client.get_order(wrong_hash, 123)
+    resp = client.get_order(123, wrong_hash)
     assert resp.status_code == 401
 
     # get_orders_for_account
